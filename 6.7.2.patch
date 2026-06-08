@@ -1,0 +1,271 @@
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index 4d1d82ca..756e2b1b 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -1,12 +1,52 @@
+ name: CI
+-on: workflow_call
++on:
++  push:
++    branches:
++      - main
++  pull_request:
++  workflow_call:
+ permissions: {}
+ jobs:
++  validate:
++    name: Validate on Node v26
++    runs-on: ubuntu-latest
++    permissions:
++      contents: read
++      id-token: write
++    steps:
++      - name: Checkout repo
++        uses: actions/checkout@v6
++        with:
++          persist-credentials: false
++
++      - name: Setup Node.js
++        uses: actions/setup-node@v6
++        with:
++          cache: npm
++          node-version-file: '.node-version'
++
++      - name: Install Dependencies
++        run: npm ci
++
++      - name: Run Test Suite
++        run: npm test
++
++      - name: Build artifacts
++        run: npm run build
++
++      - name: Upload coverage to Codecov
++        if: always() && hashFiles('coverage/lcov.info') != ''
++        uses: codecov/codecov-action@v5
++        with:
++          use_oidc: true
++          files: ./coverage/lcov.info
++          fail_ci_if_error: true
++
+   lint:
+     name: Lint source files
+     runs-on: ubuntu-latest
+     permissions:
+-      contents: read # for actions/checkout
++      contents: read
+     steps:
+       - name: Checkout repo
+         uses: actions/checkout@v6
+@@ -43,7 +83,7 @@ jobs:
+     name: Check for commonly ignored files
+     runs-on: ubuntu-latest
+     permissions:
+-      contents: read # for actions/checkout
++      contents: read
+     steps:
+       - name: Checkout repo
+         uses: actions/checkout@v6
+@@ -68,7 +108,7 @@ jobs:
+     name: Check health of package-lock.json file
+     runs-on: ubuntu-latest
+     permissions:
+-      contents: read # for actions/checkout
++      contents: read
+     steps:
+       - name: Checkout repo
+         uses: actions/checkout@v6
+@@ -97,7 +137,7 @@ jobs:
+     name: Run integration tests
+     runs-on: ubuntu-latest
+     permissions:
+-      contents: read # for actions/checkout
++      contents: read
+     steps:
+       - name: Checkout repo
+         uses: actions/checkout@v6
+@@ -108,8 +148,6 @@ jobs:
+         uses: actions/setup-node@v6
+         with:
+           node-version-file: '.node-version'
+-          # We install bunch of packages during integration tests without locking them
+-          # so we skip cache action to not pollute cache for other jobs.
+ 
+       - name: Install Dependencies
+         run: npm ci --ignore-scripts
+@@ -121,7 +159,7 @@ jobs:
+     name: Run fuzzing tests
+     runs-on: ubuntu-latest
+     permissions:
+-      contents: read # for actions/checkout
++      contents: read
+     steps:
+       - name: Checkout repo
+         uses: actions/checkout@v6
+@@ -147,7 +185,7 @@ jobs:
+       matrix:
+         node_version_to_setup: [22, 24, 25, 26]
+     permissions:
+-      contents: read # for actions/checkout
++      contents: read
+     steps:
+       - name: Checkout repo
+         uses: actions/checkout@v6
+@@ -170,8 +208,8 @@ jobs:
+     name: Run CodeQL security scan
+     runs-on: ubuntu-latest
+     permissions:
+-      contents: read # for actions/checkout
+-      security-events: write # for codeql-action
++      contents: read
++      security-events: write
+     steps:
+       - name: Checkout repo
+         uses: actions/checkout@v6
+@@ -190,7 +228,7 @@ jobs:
+     name: Build 'npmDist' artifact
+     runs-on: ubuntu-latest
+     permissions:
+-      contents: read # for actions/checkout
++      contents: read
+     steps:
+       - name: Checkout repo
+         uses: actions/checkout@v6
+@@ -219,7 +257,7 @@ jobs:
+     name: Build 'denoDist' artifact
+     runs-on: ubuntu-latest
+     permissions:
+-      contents: read # for actions/checkout
++      contents: read
+     steps:
+       - name: Checkout repo
+         uses: actions/checkout@v6
+@@ -251,11 +289,9 @@ jobs:
+     strategy:
+       fail-fast: false
+       matrix:
+-        # Keep minors pinned to preserve backward-compat coverage; include v2.x
+-        # so CI also exercises the latest Deno release used for publishing.
+         deno_version_to_setup: [2.4.x, 2.5.x, 2.6.x, 2.7.x, 2.8.x, v2.x]
+     permissions:
+-      contents: read # for actions/download-artifact
++      contents: read
+     steps:
+       - name: Download denoDist package
+         uses: actions/download-artifact@v8
+@@ -269,11 +305,5 @@ jobs:
+           deno-version: ${{ matrix.deno_version_to_setup }}
+ 
+       - name: Run denoDist package publish dry-run checks
+-        # `deno publish --dry-run` performs a number of checks including:
+-        # (a) type-checking package modules/public API,
+-        # (b) validating exports and module-graph resolution,
+-        # (c) validating the publish file set (gitignore + publish.exclude/include),
+-        # (d) validating package metadata/config, and
+-        # (e) enforcing JSR slow-types checks.
+         working-directory: ./denoDist
+         run: deno publish --dry-run
+diff --git a/.github/workflows/pull_request.yml b/.github/workflows/pull_request.yml
+index eaa66207..8f1d24ac 100644
+--- a/.github/workflows/pull_request.yml
++++ b/.github/workflows/pull_request.yml
+@@ -2,17 +2,11 @@ name: PullRequest
+ on: pull_request
+ permissions: {}
+ jobs:
+-  ci:
+-    permissions:
+-      contents: read # for actions/checkout
+-      security-events: write # for codeql-action
+-    uses: ./.github/workflows/ci.yml
+-
+   dependency-review:
+     name: Security check of added dependencies
+     runs-on: ubuntu-latest
+     permissions:
+-      contents: read # for actions/checkout
++      contents: read
+     steps:
+       - name: Checkout repo
+         uses: actions/checkout@v6
+@@ -26,7 +20,7 @@ jobs:
+     name: Diff content of NPM package
+     runs-on: ubuntu-latest
+     permissions:
+-      contents: read # for actions/checkout
++      contents: read
+     steps:
+       - name: Checkout repo
+         uses: actions/checkout@v6
+diff --git a/.github/workflows/push.yml b/.github/workflows/push.yml
+index c5768df8..1f840940 100644
+--- a/.github/workflows/push.yml
++++ b/.github/workflows/push.yml
+@@ -1,10 +1,13 @@
+ name: Push
+-on: push
++on:
++  push:
++    branches:
++      - 17.x.x
+ permissions: {}
+ jobs:
+   ci:
+     permissions:
+-      contents: read # for actions/checkout
++      contents: read
+       security-events: write
+     uses: ./.github/workflows/ci.yml
+   deploy-to-npm-branch:
+@@ -12,7 +15,7 @@ jobs:
+     needs: ci
+     if: github.ref == 'refs/heads/17.x.x'
+     permissions:
+-      contents: write # for actions/checkout and to push branch
++      contents: write
+     uses: ./.github/workflows/deploy-artifact-as-branch.yml
+     with:
+       environment: npm-branch
+@@ -25,7 +28,7 @@ jobs:
+     needs: ci
+     if: github.ref == 'refs/heads/17.x.x'
+     permissions:
+-      contents: write # for actions/checkout and to push branch
++      contents: write
+     uses: ./.github/workflows/deploy-artifact-as-branch.yml
+     with:
+       environment: deno-branch
+diff --git a/README.md b/README.md
+index 253f5e96..22e61cf6 100644
+--- a/README.md
++++ b/README.md
+@@ -5,7 +5,8 @@
+ The JavaScript reference implementation for GraphQL, a query language for APIs created by Facebook.
+ 
+ [![npm version](https://badge.fury.io/js/graphql.svg)](https://badge.fury.io/js/graphql)
+-[![Build Status](https://github.com/graphql/graphql-js/workflows/CI/badge.svg?branch=main)](https://github.com/graphql/graphql-js/actions?query=branch%3Amain)
++[![Build Status](https://github.com/graphql/graphql-js/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/graphql/graphql-js/actions/workflows/ci.yml?query=branch%3Amain)
++[![Coverage Status](https://codecov.io/gh/graphql/graphql-js/branch/main/graph/badge.svg)](https://codecov.io/gh/graphql/graphql-js)
+ 
+ See more complete documentation at https://graphql.org/ and
+ https://graphql.org/graphql-js/.
+diff --git a/package.json b/package.json
+index 3584e230..9d4d51fa 100644
+--- a/package.json
++++ b/package.json
+@@ -41,13 +41,14 @@
+     "check:ts": "tsc --pretty",
+     "check:deno": "npm run build:deno && deno publish --dry-run --allow-dirty --config denoDist/jsr.json",
+     "testonly": "npm run node:test -- \"src/**/__tests__/**/*-test.ts\"",
+-    "testonly:cover": "npm run node:test -- --experimental-test-coverage --test-coverage-include=\"src/**/*.ts\" --test-coverage-exclude=\"src/**/__tests__/**\" --test-coverage-exclude=\"**/*-test.ts\" --test-coverage-lines=100 --test-coverage-branches=100 --test-coverage-functions=100 \"src/**/__tests__/**/*-test.ts\"",
++    "testonly:cover": "node -e \"require('node:fs').mkdirSync('coverage', { recursive: true })\" && node --experimental-strip-types --throw-deprecation --test --experimental-test-isolation=none --test-concurrency=1 --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/lcov.info --experimental-test-coverage --test-coverage-include=\"src/**/*.ts\" --test-coverage-exclude=\"src/**/__tests__/**\" --test-coverage-exclude=\"**/*-test.ts\" --test-coverage-lines=100 --test-coverage-branches=100 --test-coverage-functions=100 \"src/**/__tests__/**/*-test.ts\"",
+     "testonly:watch": "npm run node:test -- --watch \"src/**/__tests__/**/*-test.ts\"",
+     "prettier": "prettier --cache --cache-strategy metadata --write --list-different .",
+     "prettier:check": "prettier --cache --cache-strategy metadata --check .",
+     "precommit": "lint-staged",
+     "check:spelling": "cspell --cache --no-progress \"**/*\"",
+     "check:integrations": "npm run node:test -- \"resources/integration-test.ts\"",
++    "build": "npm run build:npm && npm run build:deno",
+     "build:npm": "node --experimental-strip-types resources/build-npm.ts",
+     "build:deno": "node --experimental-strip-types resources/build-deno.ts",
+     "diff:npm": "node --experimental-strip-types resources/diff-npm-package.ts",

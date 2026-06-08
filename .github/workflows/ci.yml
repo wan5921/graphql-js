@@ -1,12 +1,52 @@
 name: CI
-on: workflow_call
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_call:
 permissions: {}
 jobs:
+  validate:
+    name: Validate on Node v26
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          cache: npm
+          node-version-file: '.node-version'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run Test Suite
+        run: npm test
+
+      - name: Build artifacts
+        run: npm run build
+
+      - name: Upload coverage to Codecov
+        if: always() && hashFiles('coverage/lcov.info') != ''
+        uses: codecov/codecov-action@v5
+        with:
+          use_oidc: true
+          files: ./coverage/lcov.info
+          fail_ci_if_error: true
+
   lint:
     name: Lint source files
     runs-on: ubuntu-latest
     permissions:
-      contents: read # for actions/checkout
+      contents: read
     steps:
       - name: Checkout repo
         uses: actions/checkout@v6
@@ -43,7 +83,7 @@ jobs:
     name: Check for commonly ignored files
     runs-on: ubuntu-latest
     permissions:
-      contents: read # for actions/checkout
+      contents: read
     steps:
       - name: Checkout repo
         uses: actions/checkout@v6
@@ -68,7 +108,7 @@ jobs:
     name: Check health of package-lock.json file
     runs-on: ubuntu-latest
     permissions:
-      contents: read # for actions/checkout
+      contents: read
     steps:
       - name: Checkout repo
         uses: actions/checkout@v6
@@ -97,7 +137,7 @@ jobs:
     name: Run integration tests
     runs-on: ubuntu-latest
     permissions:
-      contents: read # for actions/checkout
+      contents: read
     steps:
       - name: Checkout repo
         uses: actions/checkout@v6
@@ -108,8 +148,6 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version-file: '.node-version'
-          # We install bunch of packages during integration tests without locking them
-          # so we skip cache action to not pollute cache for other jobs.
 
       - name: Install Dependencies
         run: npm ci --ignore-scripts
@@ -121,7 +159,7 @@ jobs:
     name: Run fuzzing tests
     runs-on: ubuntu-latest
     permissions:
-      contents: read # for actions/checkout
+      contents: read
     steps:
       - name: Checkout repo
         uses: actions/checkout@v6
@@ -147,7 +185,7 @@ jobs:
       matrix:
         node_version_to_setup: [22, 24, 25, 26]
     permissions:
-      contents: read # for actions/checkout
+      contents: read
     steps:
       - name: Checkout repo
         uses: actions/checkout@v6
@@ -170,8 +208,8 @@ jobs:
     name: Run CodeQL security scan
     runs-on: ubuntu-latest
     permissions:
-      contents: read # for actions/checkout
-      security-events: write # for codeql-action
+      contents: read
+      security-events: write
     steps:
       - name: Checkout repo
         uses: actions/checkout@v6
@@ -190,7 +228,7 @@ jobs:
     name: Build 'npmDist' artifact
     runs-on: ubuntu-latest
     permissions:
-      contents: read # for actions/checkout
+      contents: read
     steps:
       - name: Checkout repo
         uses: actions/checkout@v6
@@ -219,7 +257,7 @@ jobs:
     name: Build 'denoDist' artifact
     runs-on: ubuntu-latest
     permissions:
-      contents: read # for actions/checkout
+      contents: read
     steps:
       - name: Checkout repo
         uses: actions/checkout@v6
@@ -251,11 +289,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Keep minors pinned to preserve backward-compat coverage; include v2.x
-        # so CI also exercises the latest Deno release used for publishing.
         deno_version_to_setup: [2.4.x, 2.5.x, 2.6.x, 2.7.x, 2.8.x, v2.x]
     permissions:
-      contents: read # for actions/download-artifact
+      contents: read
     steps:
       - name: Download denoDist package
         uses: actions/download-artifact@v8
@@ -269,11 +305,5 @@ jobs:
           deno-version: ${{ matrix.deno_version_to_setup }}
 
       - name: Run denoDist package publish dry-run checks
-        # `deno publish --dry-run` performs a number of checks including:
-        # (a) type-checking package modules/public API,
-        # (b) validating exports and module-graph resolution,
-        # (c) validating the publish file set (gitignore + publish.exclude/include),
-        # (d) validating package metadata/config, and
-        # (e) enforcing JSR slow-types checks.
         working-directory: ./denoDist
         run: deno publish --dry-run
