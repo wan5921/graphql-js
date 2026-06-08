@@ -1,0 +1,60 @@
+diff --git a/src/execution/Executor.ts b/src/execution/Executor.ts
+index 88163c71..b8fcaf78 100644
+--- a/src/execution/Executor.ts
++++ b/src/execution/Executor.ts
+@@ -13,6 +13,7 @@ import { addPath, pathToArray } from '../jsutils/Path.ts';
+ import { promiseForObject } from '../jsutils/promiseForObject.ts';
+ import type { PromiseOrValue } from '../jsutils/PromiseOrValue.ts';
+ import { promiseReduce } from '../jsutils/promiseReduce.ts';
++import { toError } from '../jsutils/toError.ts';
+ 
+ import { ensureGraphQLError } from '../error/ensureGraphQLError.ts';
+ import type { GraphQLFormattedError } from '../error/GraphQLError.ts';
+@@ -719,6 +720,16 @@ export class Executor<
+     fieldDetailsList: FieldDetailsList,
+     path: Path,
+   ): void {
++    if (!(rawError instanceof GraphQLError)) {
++      const errorWithStack = rawError instanceof Error ? rawError : toError(rawError);
++      console.log(
++        '[DEBUG] executeField() - resolver threw non-GraphQLError:',
++        errorWithStack.message,
++        '\nStack trace:',
++        errorWithStack.stack,
++      );
++    }
++
+     const error = locatedError(
+       rawError,
+       toNodes(fieldDetailsList),
+diff --git a/src/execution/execute.ts b/src/execution/execute.ts
+index 1f0de814..0c1f64d9 100644
+--- a/src/execution/execute.ts
++++ b/src/execution/execute.ts
+@@ -113,6 +113,9 @@ export type RootSelectionSetExecutor = (
+  * ```
+  */
+ export function execute(args: ExecutionArgs): PromiseOrValue<ExecutionResult> {
++  console.log('[DEBUG] execute() - document:', JSON.stringify(args.document, null, 2));
++  console.log('[DEBUG] execute() - variableValues:', args.variableValues);
++
+   if (!shouldTrace(executeChannel)) {
+     return executeImpl(args);
+   }
+diff --git a/src/execution/values.ts b/src/execution/values.ts
+index 3ea37359..c46b7592 100644
+--- a/src/execution/values.ts
++++ b/src/execution/values.ts
+@@ -235,10 +235,12 @@ function coerceVariableValues(
+     if (coercedValue !== undefined) {
+       coerced[varName] = coercedValue;
+     } else {
++      console.log('[DEBUG] getVariableValues() - silent coercion failure for variable:', varName, '| expected type:', varType, '| raw value:', value);
+       validateInputValue(
+         value,
+         varType,
+         (error, path) => {
++          console.log('[DEBUG] getVariableValues() - coercion error details:', error.message);
+           onError(
+             new GraphQLError(
+               `Variable "$${varName}" has invalid value${printPathArray(path)}: ${

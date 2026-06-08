@@ -235,10 +235,12 @@ function coerceVariableValues(
     if (coercedValue !== undefined) {
       coerced[varName] = coercedValue;
     } else {
+      console.log('[DEBUG] getVariableValues() - silent coercion failure for variable:', varName, '| expected type:', varType, '| raw value:', value);
       validateInputValue(
         value,
         varType,
         (error, path) => {
+          console.log('[DEBUG] getVariableValues() - coercion error details:', error.message);
           onError(
             new GraphQLError(
               `Variable "$${varName}" has invalid value${printPathArray(path)}: ${

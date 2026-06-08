@@ -13,6 +13,7 @@ import { addPath, pathToArray } from '../jsutils/Path.ts';
 import { promiseForObject } from '../jsutils/promiseForObject.ts';
 import type { PromiseOrValue } from '../jsutils/PromiseOrValue.ts';
 import { promiseReduce } from '../jsutils/promiseReduce.ts';
+import { toError } from '../jsutils/toError.ts';
 
 import { ensureGraphQLError } from '../error/ensureGraphQLError.ts';
 import type { GraphQLFormattedError } from '../error/GraphQLError.ts';
@@ -719,6 +720,16 @@ export class Executor<
     fieldDetailsList: FieldDetailsList,
     path: Path,
   ): void {
+    if (!(rawError instanceof GraphQLError)) {
+      const errorWithStack = rawError instanceof Error ? rawError : toError(rawError);
+      console.log(
+        '[DEBUG] executeField() - resolver threw non-GraphQLError:',
+        errorWithStack.message,
+        '\nStack trace:',
+        errorWithStack.stack,
+      );
+    }
+
     const error = locatedError(
       rawError,
       toNodes(fieldDetailsList),
