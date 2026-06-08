@@ -1,0 +1,83 @@
+diff --git a/src/execution/Executor.ts b/src/execution/Executor.ts
+index 88163c71..ad1cae23 100644
+--- a/src/execution/Executor.ts
++++ b/src/execution/Executor.ts
+@@ -680,6 +680,12 @@ export class Executor<
+       }
+       return completed;
+     } catch (rawError) {
++      if (!(rawError instanceof GraphQLError)) {
++        console.error(
++          `Resolver threw non-GraphQLError for field "${info.parentType}.${info.fieldName}":`,
++          rawError instanceof Error ? rawError.stack : rawError,
++        );
++      }
+       this.handleFieldError(rawError, returnType, fieldDetailsList, path);
+       return null;
+     }
+@@ -876,6 +882,12 @@ export class Executor<
+       }
+       return completed;
+     } catch (rawError) {
++      if (!(rawError instanceof GraphQLError)) {
++        console.error(
++          `Async resolver threw non-GraphQLError for field "${info.parentType}.${info.fieldName}":`,
++          rawError instanceof Error ? rawError.stack : rawError,
++        );
++      }
+       this.handleFieldError(rawError, returnType, fieldDetailsList, path);
+       return null;
+     }
+diff --git a/src/execution/execute.ts b/src/execution/execute.ts
+index 1f0de814..9fb72ab6 100644
+--- a/src/execution/execute.ts
++++ b/src/execution/execute.ts
+@@ -151,6 +151,9 @@ function buildOperationContextFromArgs(
+ }
+ 
+ function executeImpl(args: ExecutionArgs): PromiseOrValue<ExecutionResult> {
++  console.log('executeImpl document:', args.document);
++  console.log('executeImpl variableValues:', args.variableValues);
++
+   if (args.schema.getDirective('defer') || args.schema.getDirective('stream')) {
+     throw new Error(UNEXPECTED_EXPERIMENTAL_DIRECTIVES);
+   }
+diff --git a/src/execution/values.ts b/src/execution/values.ts
+index 3ea37359..853981ec 100644
+--- a/src/execution/values.ts
++++ b/src/execution/values.ts
+@@ -1,6 +1,7 @@
+ /** @category Values */
+ 
+ import { invariant } from '../jsutils/invariant.ts';
++import { inspect } from '../jsutils/inspect.ts';
+ import type { Maybe } from '../jsutils/Maybe.ts';
+ import type { ObjMap, ReadOnlyObjMap } from '../jsutils/ObjMap.ts';
+ import { printPathArray } from '../jsutils/printPathArray.ts';
+@@ -177,12 +178,14 @@ export function getVariableValues(
+     );
+ 
+     if (errors.length === 0) {
++      console.log('getVariableValues: coerced values:', variableValues.coerced);
+       return { variableValues };
+     }
+   } catch (error) {
+     errors.push(ensureGraphQLError(error));
+   }
+ 
++  console.error('getVariableValues: variable coercion errors:', errors);
+   return { errors };
+ }
+ 
+@@ -235,6 +238,11 @@ function coerceVariableValues(
+     if (coercedValue !== undefined) {
+       coerced[varName] = coercedValue;
+     } else {
++      console.warn(
++        `getVariableValues: coerceInputValue returned undefined for variable "$${varName}" ` +
++          `(type: ${varType}), value: ${inspect(value)}. ` +
++          `This may indicate a variable type mismatch.`,
++      );
+       validateInputValue(
+         value,
+         varType,

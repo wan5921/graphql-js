@@ -1,6 +1,7 @@
 /** @category Values */
 
 import { invariant } from '../jsutils/invariant.ts';
+import { inspect } from '../jsutils/inspect.ts';
 import type { Maybe } from '../jsutils/Maybe.ts';
 import type { ObjMap, ReadOnlyObjMap } from '../jsutils/ObjMap.ts';
 import { printPathArray } from '../jsutils/printPathArray.ts';
@@ -177,12 +178,14 @@ export function getVariableValues(
     );
 
     if (errors.length === 0) {
+      console.log('getVariableValues: coerced values:', variableValues.coerced);
       return { variableValues };
     }
   } catch (error) {
     errors.push(ensureGraphQLError(error));
   }
 
+  console.error('getVariableValues: variable coercion errors:', errors);
   return { errors };
 }
 
@@ -235,6 +238,11 @@ function coerceVariableValues(
     if (coercedValue !== undefined) {
       coerced[varName] = coercedValue;
     } else {
+      console.warn(
+        `getVariableValues: coerceInputValue returned undefined for variable "$${varName}" ` +
+          `(type: ${varType}), value: ${inspect(value)}. ` +
+          `This may indicate a variable type mismatch.`,
+      );
       validateInputValue(
         value,
         varType,
