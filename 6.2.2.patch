@@ -1,0 +1,279 @@
+diff --git a/src/execution/Executor.ts b/src/execution/Executor.ts
+index 88163c71..174a4459 100644
+--- a/src/execution/Executor.ts
++++ b/src/execution/Executor.ts
+@@ -648,7 +648,12 @@ export class Executor<
+       // The resolve function's optional third argument is a context value that
+       // is provided to every resolve function within an execution. It is commonly
+       // used to represent an authenticated user, or request-specific caches.
+-      const result = resolveFn(source, args, contextValue, info);
++      let result: unknown;
++      try {
++        result = resolveFn(source, args, contextValue, info);
++      } catch (rawError) {
++        throw this.normalizeResolverError(rawError);
++      }
+ 
+       if (isPromiseLike(result)) {
+         return this.completePromisedValue(
+@@ -656,7 +661,9 @@ export class Executor<
+           fieldDetailsList,
+           info,
+           path,
+-          result,
++          Promise.resolve(result).then(undefined, (rawError: unknown) => {
++            throw this.normalizeResolverError(rawError);
++          }),
+           positionContext,
+         );
+       }
+@@ -685,6 +692,17 @@ export class Executor<
+     }
+   }
+ 
++  normalizeResolverError(rawError: unknown): GraphQLError {
++    if (rawError instanceof GraphQLError) {
++      return rawError;
++    }
++
++    const error = ensureGraphQLError(rawError);
++    const stack = error.cause instanceof Error ? error.cause.stack : error.stack;
++    globalThis.console.error(stack);
++    return error;
++  }
++
+   /**
+    * Build a graphql:resolve channel context for a single field invocation.
+    *
+diff --git a/src/execution/__tests__/executor-test.ts b/src/execution/__tests__/executor-test.ts
+index ba8368af..137bdc91 100644
+--- a/src/execution/__tests__/executor-test.ts
++++ b/src/execution/__tests__/executor-test.ts
+@@ -1,4 +1,4 @@
+-import { describe, it } from 'node:test';
++import { describe, it, mock } from 'node:test';
+ 
+ import { assert, expect } from 'chai';
+ 
+@@ -616,6 +616,94 @@ describe('Execute: Handles basic execution tasks', () => {
+     });
+   });
+ 
++  it('logs document and variableValues when executing a root selection set', async () => {
++    const log = mock.method(globalThis.console, 'log', () => undefined);
++
++    try {
++      const schema = new GraphQLSchema({
++        query: new GraphQLObjectType({
++          name: 'Query',
++          fields: {
++            echo: {
++              type: GraphQLString,
++              args: { value: { type: GraphQLString } },
++              resolve: (_source, { value }) => value,
++            },
++          },
++        }),
++      });
++      const document = parse('query ($value: String) { echo(value: $value) }');
++
++      await executeThrowingOnIncremental({
++        schema,
++        document,
++        variableValues: { value: 'abc' },
++      });
++
++      expect(log.mock.calls).to.have.length(2);
++      expect(log.mock.calls[0].arguments[0]).to.equal(
++        'executeOperation document:',
++      );
++      expect(log.mock.calls[0].arguments[1]).to.equal(document);
++      expect(log.mock.calls[1].arguments[0]).to.equal(
++        'executeOperation variableValues:',
++      );
++      expect(log.mock.calls[1].arguments[1]).to.have.nested.property(
++        'coerced.value',
++        'abc',
++      );
++    } finally {
++      log.mock.restore();
++    }
++  });
++
++  it('logs stack and wraps non-GraphQLError resolver failures', async () => {
++    const log = mock.method(globalThis.console, 'log', () => undefined);
++    const error = mock.method(globalThis.console, 'error', () => undefined);
++
++    try {
++      const schema = new GraphQLSchema({
++        query: new GraphQLObjectType({
++          name: 'Query',
++          fields: {
++            boom: {
++              type: GraphQLString,
++              resolve() {
++                throw new Error('boom');
++              },
++            },
++          },
++        }),
++      });
++
++      const result = await executeThrowingOnIncremental({
++        schema,
++        document: parse('{ boom }'),
++      });
++
++      expectJSON(result).toDeepEqual({
++        data: {
++          boom: null,
++        },
++        errors: [
++          {
++            message: 'boom',
++            locations: [{ line: 1, column: 3 }],
++            path: ['boom'],
++          },
++        ],
++      });
++      expect(result.errors?.[0]).to.be.instanceOf(Error);
++      expect(error.mock.calls).to.have.length(1);
++      expect(String(error.mock.calls[0].arguments[0])).to.contain(
++        'Error: boom',
++      );
++    } finally {
++      error.mock.restore();
++      log.mock.restore();
++    }
++  });
++
+   it('nulls error subtree for promise rejection #1071', async () => {
+     const schema = new GraphQLSchema({
+       query: new GraphQLObjectType({
+diff --git a/src/execution/__tests__/variables-test.ts b/src/execution/__tests__/variables-test.ts
+index bc2a2660..a3aafbac 100644
+--- a/src/execution/__tests__/variables-test.ts
++++ b/src/execution/__tests__/variables-test.ts
+@@ -1505,6 +1505,60 @@ describe('Execute: Handles inputs', () => {
+     });
+   });
+ 
++  describe('getVariableValues: invalid coercion diagnostics', () => {
++    const UndefinedScalar = new GraphQLScalarType({
++      name: 'UndefinedScalar',
++      coerceInputValue() {
++        return undefined;
++      },
++    });
++
++    const schemaWithUndefinedScalar = new GraphQLSchema({
++      query: new GraphQLObjectType({
++        name: 'QueryWithUndefinedScalar',
++        fields: {
++          field: {
++            type: GraphQLString,
++            args: {
++              input: {
++                type: UndefinedScalar,
++              },
++            },
++          },
++        },
++      }),
++    });
++
++    const doc = parse(`
++      query ($input: UndefinedScalar) {
++        field(input: $input)
++      }
++    `);
++
++    const operation = doc.definitions[0];
++    assert(operation.kind === Kind.OPERATION_DEFINITION);
++    const { variableDefinitions } = operation;
++    assert(variableDefinitions != null);
++
++    it('does not silently drop variables when coercion fails', () => {
++      const result = getVariableValues(
++        schemaWithUndefinedScalar,
++        variableDefinitions,
++        { input: 123 },
++      );
++
++      expectJSON(result).toDeepEqual({
++        errors: [
++          {
++            message:
++              'Variable "$input" has invalid value: Expected value of type "UndefinedScalar", found: 123.',
++            locations: [{ line: 2, column: 14 }],
++          },
++        ],
++      });
++    });
++  });
++
+   describe('using fragment arguments', () => {
+     it('when there are no fragment arguments', () => {
+       const result = executeQueryWithFragmentArguments(`
+diff --git a/src/execution/execute.ts b/src/execution/execute.ts
+index 1f0de814..b417c8c1 100644
+--- a/src/execution/execute.ts
++++ b/src/execution/execute.ts
+@@ -294,6 +294,15 @@ function executeIgnoringIncrementalImpl(
+ export function executeRootSelectionSet(
+   validatedExecutionArgs: ValidatedExecutionArgs,
+ ): PromiseOrValue<ExecutionResult> {
++  globalThis.console.log(
++    'executeOperation document:',
++    validatedExecutionArgs.document,
++  );
++  globalThis.console.log(
++    'executeOperation variableValues:',
++    validatedExecutionArgs.variableValues,
++  );
++
+   return new ExecutorThrowingOnIncremental(
+     validatedExecutionArgs,
+   ).executeRootSelectionSet();
+diff --git a/src/execution/values.ts b/src/execution/values.ts
+index 3ea37359..426c062d 100644
+--- a/src/execution/values.ts
++++ b/src/execution/values.ts
+@@ -1,5 +1,6 @@
+ /** @category Values */
+ 
++import { inspect } from '../jsutils/inspect.ts';
+ import { invariant } from '../jsutils/invariant.ts';
+ import type { Maybe } from '../jsutils/Maybe.ts';
+ import type { ObjMap, ReadOnlyObjMap } from '../jsutils/ObjMap.ts';
+@@ -235,10 +236,12 @@ function coerceVariableValues(
+     if (coercedValue !== undefined) {
+       coerced[varName] = coercedValue;
+     } else {
++      let reportedValidationError = false;
+       validateInputValue(
+         value,
+         varType,
+         (error, path) => {
++          reportedValidationError = true;
+           onError(
+             new GraphQLError(
+               `Variable "$${varName}" has invalid value${printPathArray(path)}: ${
+@@ -250,6 +253,17 @@ function coerceVariableValues(
+         },
+         hideSuggestions,
+       );
++
++      if (!reportedValidationError) {
++        onError(
++          new GraphQLError(
++            `Variable "$${varName}" has invalid value: Expected value of type "${varType}", found: ${inspect(
++              value,
++            )}.`,
++            { nodes: varDefNode },
++          ),
++        );
++      }
+     }
+   }
+ 

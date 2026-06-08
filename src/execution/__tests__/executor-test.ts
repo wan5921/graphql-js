@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test';
+import { describe, it, mock } from 'node:test';
 
 import { assert, expect } from 'chai';
 
@@ -614,6 +614,94 @@ describe('Execute: Handles basic execution tasks', () => {
         },
       ],
     });
+  });
+
+  it('logs document and variableValues when executing a root selection set', async () => {
+    const log = mock.method(globalThis.console, 'log', () => undefined);
+
+    try {
+      const schema = new GraphQLSchema({
+        query: new GraphQLObjectType({
+          name: 'Query',
+          fields: {
+            echo: {
+              type: GraphQLString,
+              args: { value: { type: GraphQLString } },
+              resolve: (_source, { value }) => value,
+            },
+          },
+        }),
+      });
+      const document = parse('query ($value: String) { echo(value: $value) }');
+
+      await executeThrowingOnIncremental({
+        schema,
+        document,
+        variableValues: { value: 'abc' },
+      });
+
+      expect(log.mock.calls).to.have.length(2);
+      expect(log.mock.calls[0].arguments[0]).to.equal(
+        'executeOperation document:',
+      );
+      expect(log.mock.calls[0].arguments[1]).to.equal(document);
+      expect(log.mock.calls[1].arguments[0]).to.equal(
+        'executeOperation variableValues:',
+      );
+      expect(log.mock.calls[1].arguments[1]).to.have.nested.property(
+        'coerced.value',
+        'abc',
+      );
+    } finally {
+      log.mock.restore();
+    }
+  });
+
+  it('logs stack and wraps non-GraphQLError resolver failures', async () => {
+    const log = mock.method(globalThis.console, 'log', () => undefined);
+    const error = mock.method(globalThis.console, 'error', () => undefined);
+
+    try {
+      const schema = new GraphQLSchema({
+        query: new GraphQLObjectType({
+          name: 'Query',
+          fields: {
+            boom: {
+              type: GraphQLString,
+              resolve() {
+                throw new Error('boom');
+              },
+            },
+          },
+        }),
+      });
+
+      const result = await executeThrowingOnIncremental({
+        schema,
+        document: parse('{ boom }'),
+      });
+
+      expectJSON(result).toDeepEqual({
+        data: {
+          boom: null,
+        },
+        errors: [
+          {
+            message: 'boom',
+            locations: [{ line: 1, column: 3 }],
+            path: ['boom'],
+          },
+        ],
+      });
+      expect(result.errors?.[0]).to.be.instanceOf(Error);
+      expect(error.mock.calls).to.have.length(1);
+      expect(String(error.mock.calls[0].arguments[0])).to.contain(
+        'Error: boom',
+      );
+    } finally {
+      error.mock.restore();
+      log.mock.restore();
+    }
   });
 
   it('nulls error subtree for promise rejection #1071', async () => {
