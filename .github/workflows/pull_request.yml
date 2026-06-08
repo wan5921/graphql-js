@@ -2,11 +2,17 @@ name: PullRequest
 on: pull_request
 permissions: {}
 jobs:
+  ci:
+    permissions:
+      contents: read # for actions/checkout
+      security-events: write # for codeql-action
+    uses: ./.github/workflows/ci.yml
+
   dependency-review:
     name: Security check of added dependencies
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: read # for actions/checkout
     steps:
       - name: Checkout repo
         uses: actions/checkout@v6
@@ -20,7 +26,7 @@ jobs:
     name: Diff content of NPM package
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: read # for actions/checkout
     steps:
       - name: Checkout repo
         uses: actions/checkout@v6

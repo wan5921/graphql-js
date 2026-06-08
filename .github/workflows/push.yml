@@ -1,13 +1,10 @@
 name: Push
-on:
-  push:
-    branches:
-      - 17.x.x
+on: push
 permissions: {}
 jobs:
   ci:
     permissions:
-      contents: read
+      contents: read # for actions/checkout
       security-events: write
     uses: ./.github/workflows/ci.yml
   deploy-to-npm-branch:
@@ -15,7 +12,7 @@ jobs:
     needs: ci
     if: github.ref == 'refs/heads/17.x.x'
     permissions:
-      contents: write
+      contents: write # for actions/checkout and to push branch
     uses: ./.github/workflows/deploy-artifact-as-branch.yml
     with:
       environment: npm-branch
@@ -28,7 +25,7 @@ jobs:
     needs: ci
     if: github.ref == 'refs/heads/17.x.x'
     permissions:
-      contents: write
+      contents: write # for actions/checkout and to push branch
     uses: ./.github/workflows/deploy-artifact-as-branch.yml
     with:
       environment: deno-branch
