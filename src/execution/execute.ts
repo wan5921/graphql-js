@@ -294,15 +294,6 @@ function executeIgnoringIncrementalImpl(
 export function executeRootSelectionSet(
   validatedExecutionArgs: ValidatedExecutionArgs,
 ): PromiseOrValue<ExecutionResult> {
-  globalThis.console.log(
-    'executeOperation document:',
-    validatedExecutionArgs.document,
-  );
-  globalThis.console.log(
-    'executeOperation variableValues:',
-    validatedExecutionArgs.variableValues,
-  );
-
   return new ExecutorThrowingOnIncremental(
     validatedExecutionArgs,
   ).executeRootSelectionSet();

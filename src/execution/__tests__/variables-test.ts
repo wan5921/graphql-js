@@ -1505,60 +1505,6 @@ describe('Execute: Handles inputs', () => {
     });
   });
 
-  describe('getVariableValues: invalid coercion diagnostics', () => {
-    const UndefinedScalar = new GraphQLScalarType({
-      name: 'UndefinedScalar',
-      coerceInputValue() {
-        return undefined;
-      },
-    });
-
-    const schemaWithUndefinedScalar = new GraphQLSchema({
-      query: new GraphQLObjectType({
-        name: 'QueryWithUndefinedScalar',
-        fields: {
-          field: {
-            type: GraphQLString,
-            args: {
-              input: {
-                type: UndefinedScalar,
-              },
-            },
-          },
-        },
-      }),
-    });
-
-    const doc = parse(`
-      query ($input: UndefinedScalar) {
-        field(input: $input)
-      }
-    `);
-
-    const operation = doc.definitions[0];
-    assert(operation.kind === Kind.OPERATION_DEFINITION);
-    const { variableDefinitions } = operation;
-    assert(variableDefinitions != null);
-
-    it('does not silently drop variables when coercion fails', () => {
-      const result = getVariableValues(
-        schemaWithUndefinedScalar,
-        variableDefinitions,
-        { input: 123 },
-      );
-
-      expectJSON(result).toDeepEqual({
-        errors: [
-          {
-            message:
-              'Variable "$input" has invalid value: Expected value of type "UndefinedScalar", found: 123.',
-            locations: [{ line: 2, column: 14 }],
-          },
-        ],
-      });
-    });
-  });
-
   describe('using fragment arguments', () => {
     it('when there are no fragment arguments', () => {
       const result = executeQueryWithFragmentArguments(`

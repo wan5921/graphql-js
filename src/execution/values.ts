@@ -1,6 +1,5 @@
 /** @category Values */
 
-import { inspect } from '../jsutils/inspect.ts';
 import { invariant } from '../jsutils/invariant.ts';
 import type { Maybe } from '../jsutils/Maybe.ts';
 import type { ObjMap, ReadOnlyObjMap } from '../jsutils/ObjMap.ts';
@@ -236,12 +235,10 @@ function coerceVariableValues(
     if (coercedValue !== undefined) {
       coerced[varName] = coercedValue;
     } else {
-      let reportedValidationError = false;
       validateInputValue(
         value,
         varType,
         (error, path) => {
-          reportedValidationError = true;
           onError(
             new GraphQLError(
               `Variable "$${varName}" has invalid value${printPathArray(path)}: ${
@@ -253,17 +250,6 @@ function coerceVariableValues(
         },
         hideSuggestions,
       );
-
-      if (!reportedValidationError) {
-        onError(
-          new GraphQLError(
-            `Variable "$${varName}" has invalid value: Expected value of type "${varType}", found: ${inspect(
-              value,
-            )}.`,
-            { nodes: varDefNode },
-          ),
-        );
-      }
     }
   }
 
