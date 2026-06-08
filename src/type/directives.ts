@@ -478,29 +478,6 @@ export const GraphQLDisableErrorPropagationDirective: GraphQLDirective =
   });
 
 /**
- * Used to apply a regex replacement to the string value of a field.
- *
- * This directive is applied during execution and transforms the resolved
- * string value by replacing matches of `regex` with `replace`.
- */
-export const GraphQLMaskDirective: GraphQLDirective = new GraphQLDirective({
-  name: 'mask',
-  description:
-    'Directs the executor to apply a regex replacement to the string value of this field.',
-  locations: [DirectiveLocation.FIELD],
-  args: {
-    regex: {
-      type: new GraphQLNonNull(GraphQLString),
-      description: 'The regular expression pattern to match.',
-    },
-    replace: {
-      type: new GraphQLNonNull(GraphQLString),
-      description: 'The replacement string.',
-    },
-  },
-});
-
-/**
  * Full list of stable directives specified by GraphQL.js.
  *
  * Experimental `@defer` and `@stream` are exported separately and are not
@@ -513,7 +490,6 @@ export const specifiedDirectives: ReadonlyArray<GraphQLDirective> =
     GraphQLDeprecatedDirective,
     GraphQLSpecifiedByDirective,
     GraphQLOneOfDirective,
-    GraphQLMaskDirective,
   ]);
 
 /**

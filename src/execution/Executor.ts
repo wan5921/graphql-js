@@ -8,7 +8,6 @@ import { isPromise, isPromiseLike } from '../jsutils/isPromise.ts';
 import { memoize2 } from '../jsutils/memoize2.ts';
 import { memoize3 } from '../jsutils/memoize3.ts';
 import type { ObjMap } from '../jsutils/ObjMap.ts';
-import type { Maybe } from '../jsutils/Maybe.ts';
 import type { Path } from '../jsutils/Path.ts';
 import { addPath, pathToArray } from '../jsutils/Path.ts';
 import { promiseForObject } from '../jsutils/promiseForObject.ts';
@@ -53,15 +52,12 @@ import {
   traceMixed,
 } from '../diagnostics.ts';
 
-import { GraphQLMaskDirective } from '../type/directives.ts';
-
 import { AbortedGraphQLExecutionError } from './AbortedGraphQLExecutionError.ts';
 import { buildResolveInfo } from './buildResolveInfo.ts';
 import { withCancellation } from './cancellablePromise.ts';
 import type {
   DeferUsage,
   FieldDetailsList,
-  FragmentVariableValues,
   GroupedFieldSet,
 } from './collectFields.ts';
 import {
@@ -76,8 +72,7 @@ import type { StreamUsage } from './getStreamUsage.ts';
 import { getStreamUsage as _getStreamUsage } from './getStreamUsage.ts';
 import { runAsyncWorkFinishedHook } from './hooks.ts';
 import { returnIteratorCatchingErrors } from './returnIteratorCatchingErrors.ts';
-import { getArgumentValues, getDirectiveValues } from './values.ts';
-import type { VariableValues } from './values.ts';
+import { getArgumentValues } from './values.ts';
 
 /* eslint-disable max-params */
 // This file contains a lot of such errors but we plan to refactor it anyway
@@ -656,39 +651,22 @@ export class Executor<
       const result = resolveFn(source, args, contextValue, info);
 
       if (isPromiseLike(result)) {
-        const maskedResult = result.then((resolved) =>
-          this.applyMaskDirective(
-            firstNode,
-            variableValues,
-            firstFieldDetails.fragmentVariableValues,
-            hideSuggestions,
-            resolved,
-          ),
-        );
         return this.completePromisedValue(
           returnType,
           fieldDetailsList,
           info,
           path,
-          maskedResult,
+          result,
           positionContext,
         );
       }
-
-      const maskedResult = this.applyMaskDirective(
-        firstNode,
-        variableValues,
-        firstFieldDetails.fragmentVariableValues,
-        hideSuggestions,
-        result,
-      );
 
       const completed = this.completeValue(
         returnType,
         fieldDetailsList,
         info,
         path,
-        maskedResult,
+        result,
         positionContext,
       );
 
@@ -759,37 +737,6 @@ export class Executor<
     // Otherwise, error protection is applied, logging the error and resolving
     // a null value for this field if one is encountered.
     this.collectedErrors.add(error, path);
-  }
-
-  applyMaskDirective(
-    node: FieldNode,
-    variableValues: VariableValues,
-    fragmentVariableValues: FragmentVariableValues | undefined,
-    hideSuggestions: Maybe<boolean>,
-    result: unknown,
-  ): unknown {
-    if (typeof result !== 'string') {
-      return result;
-    }
-
-    const maskArgs = getDirectiveValues(
-      GraphQLMaskDirective,
-      node,
-      variableValues,
-      fragmentVariableValues,
-      hideSuggestions,
-    );
-
-    if (!maskArgs) {
-      return result;
-    }
-
-    try {
-      const regex = new RegExp(maskArgs.regex as string);
-      return (result as string).replace(regex, maskArgs.replace as string);
-    } catch {
-      return result;
-    }
   }
 
   /**

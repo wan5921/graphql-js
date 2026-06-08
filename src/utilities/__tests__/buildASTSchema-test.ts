@@ -25,7 +25,6 @@ import {
   GraphQLDeprecatedDirective,
   GraphQLIncludeDirective,
   GraphQLOneOfDirective,
-  GraphQLMaskDirective,
   GraphQLSkipDirective,
   GraphQLSpecifiedByDirective,
 } from '../../type/directives.ts';
@@ -225,7 +224,7 @@ describe('Schema Builder', () => {
   it('Maintains @include, @skip & @specifiedBy', () => {
     const schema = buildSchema('type Query');
 
-    expect(schema.getDirectives()).to.have.lengthOf(6);
+    expect(schema.getDirectives()).to.have.lengthOf(5);
     expect(schema.getDirective('skip')).to.equal(GraphQLSkipDirective);
     expect(schema.getDirective('include')).to.equal(GraphQLIncludeDirective);
     expect(schema.getDirective('deprecated')).to.equal(
@@ -235,7 +234,6 @@ describe('Schema Builder', () => {
       GraphQLSpecifiedByDirective,
     );
     expect(schema.getDirective('oneOf')).to.equal(GraphQLOneOfDirective);
-    expect(schema.getDirective('mask')).to.equal(GraphQLMaskDirective);
   });
 
   it('Overriding directives excludes specified', () => {
@@ -247,7 +245,7 @@ describe('Schema Builder', () => {
       directive @oneOf on OBJECT
     `);
 
-    expect(schema.getDirectives()).to.have.lengthOf(6);
+    expect(schema.getDirectives()).to.have.lengthOf(5);
     expect(schema.getDirective('skip')).to.not.equal(GraphQLSkipDirective);
     expect(schema.getDirective('include')).to.not.equal(
       GraphQLIncludeDirective,
@@ -266,13 +264,12 @@ describe('Schema Builder', () => {
       directive @foo(arg: Int) on FIELD
     `);
 
-    expect(schema.getDirectives()).to.have.lengthOf(7);
+    expect(schema.getDirectives()).to.have.lengthOf(6);
     expect(schema.getDirective('skip')).to.not.equal(undefined);
     expect(schema.getDirective('include')).to.not.equal(undefined);
     expect(schema.getDirective('deprecated')).to.not.equal(undefined);
     expect(schema.getDirective('specifiedBy')).to.not.equal(undefined);
     expect(schema.getDirective('oneOf')).to.not.equal(undefined);
-    expect(schema.getDirective('mask')).to.not.equal(undefined);
   });
 
   it('Type modifiers', () => {
