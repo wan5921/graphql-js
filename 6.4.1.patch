@@ -1,0 +1,187 @@
+diff --git a/src/execution/Executor.ts b/src/execution/Executor.ts
+index 88163c71..e52855dd 100644
+--- a/src/execution/Executor.ts
++++ b/src/execution/Executor.ts
+@@ -18,6 +18,8 @@ import { ensureGraphQLError } from '../error/ensureGraphQLError.ts';
+ import type { GraphQLFormattedError } from '../error/GraphQLError.ts';
+ import { GraphQLError } from '../error/GraphQLError.ts';
+ import { locatedError } from '../error/locatedError.ts';
++import { GraphQLMaskDirective } from '../type/directives.ts';
++import { getArgumentValues } from './values.ts';
+ 
+ import type { FieldNode } from '../language/ast.ts';
+ import { OperationTypeNode } from '../language/ast.ts';
+@@ -814,7 +816,12 @@ export class Executor<
+     // If field type is a leaf type, Scalar or Enum, coerce to a valid value,
+     // returning null if coercion is not possible.
+     if (isLeafType(returnType)) {
+-      return this.completeLeafValue(returnType, result);
++      return this.completeLeafValue(
++        returnType,
++        result,
++        fieldDetailsList,
++        info,
++      );
+     }
+ 
+     // If field type is an abstract type, Interface or Union, determine the
+@@ -1236,7 +1243,12 @@ export class Executor<
+    *
+    * @internal
+    */
+-  completeLeafValue(returnType: GraphQLLeafType, result: unknown): unknown {
++  completeLeafValue(
++    returnType: GraphQLLeafType,
++    result: unknown,
++    fieldDetailsList: FieldDetailsList,
++    info: GraphQLResolveInfo,
++  ): unknown {
+     const coerced = returnType.coerceOutputValue(result);
+     if (coerced == null) {
+       throw new Error(
+@@ -1244,6 +1256,35 @@ export class Executor<
+           `return non-nullable value, returned: ${inspect(coerced)}`,
+       );
+     }
++
++    // Apply @mask directive if it's a string
++    if (typeof coerced === 'string') {
++      const { variableValues } = this.validatedExecutionArgs;
++      for (const fieldDetail of fieldDetailsList) {
++        const node = fieldDetail.node;
++        const maskDirectiveNode = node.directives?.find(
++          (directive) => directive.name.value === GraphQLMaskDirective.name,
++        );
++        if (maskDirectiveNode) {
++          const maskArgs = getArgumentValues(
++            GraphQLMaskDirective,
++            maskDirectiveNode,
++            variableValues,
++            fieldDetail.fragmentVariableValues,
++            this.validatedExecutionArgs.hideSuggestions,
++          );
++          if (maskArgs) {
++            const { regex, replace } = maskArgs;
++            try {
++              return coerced.replace(new RegExp(regex), replace);
++            } catch {
++              // If regex is invalid, return original value
++              return coerced;
++            }
++          }
++        }
++      }
++    }
+     return coerced;
+   }
+ 
+diff --git a/src/execution/__tests__/directives-test.ts b/src/execution/__tests__/directives-test.ts
+index 4a43d335..887a87b9 100644
+--- a/src/execution/__tests__/directives-test.ts
++++ b/src/execution/__tests__/directives-test.ts
+@@ -7,15 +7,19 @@ import { parse } from '../../language/parser.ts';
+ import { GraphQLObjectType } from '../../type/definition.ts';
+ import { GraphQLString } from '../../type/scalars.ts';
+ import { GraphQLSchema } from '../../type/schema.ts';
++import { GraphQLMaskDirective } from '../../type/directives.ts';
+ 
+ import { executeSync } from '../execute.ts';
+ 
+ const schema = new GraphQLSchema({
++  directives: [GraphQLMaskDirective],
+   query: new GraphQLObjectType({
+     name: 'TestType',
+     fields: {
+       a: { type: GraphQLString },
+       b: { type: GraphQLString },
++      email: { type: GraphQLString },
++      phone: { type: GraphQLString },
+     },
+   }),
+ });
+@@ -27,6 +31,12 @@ const rootValue = {
+   b() {
+     return 'b';
+   },
++  email() {
++    return 'user@example.com';
++  },
++  phone() {
++    return '123-456-7890';
++  },
+ };
+ 
+ function executeTestQuery(query: string) {
+@@ -309,4 +319,44 @@ describe('Execute: handles directives', () => {
+       });
+     });
+   });
++
++  describe('works with @mask directive', () => {
++    it('masks email address', () => {
++      const result = executeTestQuery(
++        '{ email @mask(regex: "(.*)@(.*)", replace: "***@$2") }',
++      );
++
++      expect(result).to.deep.equal({
++        data: { email: '***@example.com' },
++      });
++    });
++
++    it('masks phone number', () => {
++      const result = executeTestQuery(
++        '{ phone @mask(regex: "(\\d{3})-(\\d{3})-(\\d{4})", replace: "***-***-$3") }',
++      );
++
++      expect(result).to.deep.equal({
++        data: { phone: '***-***-7890' },
++      });
++    });
++
++    it('does not mask when directive is not present', () => {
++      const result = executeTestQuery('{ email, phone }');
++
++      expect(result).to.deep.equal({
++        data: { email: 'user@example.com', phone: '123-456-7890' },
++      });
++    });
++
++    it('works with multiple directives', () => {
++      const result = executeTestQuery(
++        '{ a, b @include(if: true) @mask(regex: "(.)", replace: "$1$1") }',
++      );
++
++      expect(result).to.deep.equal({
++        data: { a: 'a', b: 'bb' },
++      });
++    });
++  });
+ });
+diff --git a/src/type/directives.ts b/src/type/directives.ts
+index 895a3c8b..6cbed700 100644
+--- a/src/type/directives.ts
++++ b/src/type/directives.ts
+@@ -461,6 +461,23 @@ export const GraphQLOneOfDirective: GraphQLDirective = new GraphQLDirective({
+   args: {},
+ });
+ 
++export const GraphQLMaskDirective: GraphQLDirective = new GraphQLDirective({
++  name: 'mask',
++  description:
++    'Masks string field values using a regular expression and replacement string.',
++  locations: [DirectiveLocation.FIELD],
++  args: {
++    regex: {
++      type: new GraphQLNonNull(GraphQLString),
++      description: 'The regular expression pattern to match.',
++    },
++    replace: {
++      type: new GraphQLNonNull(GraphQLString),
++      description: 'The replacement string to use.',
++    },
++  },
++});
++
+ /**
+  * Disables error propagation (experimental).
+  *

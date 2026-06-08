@@ -7,15 +7,19 @@ import { parse } from '../../language/parser.ts';
 import { GraphQLObjectType } from '../../type/definition.ts';
 import { GraphQLString } from '../../type/scalars.ts';
 import { GraphQLSchema } from '../../type/schema.ts';
+import { GraphQLMaskDirective } from '../../type/directives.ts';
 
 import { executeSync } from '../execute.ts';
 
 const schema = new GraphQLSchema({
+  directives: [GraphQLMaskDirective],
   query: new GraphQLObjectType({
     name: 'TestType',
     fields: {
       a: { type: GraphQLString },
       b: { type: GraphQLString },
+      email: { type: GraphQLString },
+      phone: { type: GraphQLString },
     },
   }),
 });
@@ -26,6 +30,12 @@ const rootValue = {
   },
   b() {
     return 'b';
+  },
+  email() {
+    return 'user@example.com';
+  },
+  phone() {
+    return '123-456-7890';
   },
 };
 
@@ -306,6 +316,46 @@ describe('Execute: handles directives', () => {
 
       expect(result).to.deep.equal({
         data: { a: 'a' },
+      });
+    });
+  });
+
+  describe('works with @mask directive', () => {
+    it('masks email address', () => {
+      const result = executeTestQuery(
+        '{ email @mask(regex: "(.*)@(.*)", replace: "***@$2") }',
+      );
+
+      expect(result).to.deep.equal({
+        data: { email: '***@example.com' },
+      });
+    });
+
+    it('masks phone number', () => {
+      const result = executeTestQuery(
+        '{ phone @mask(regex: "(\\d{3})-(\\d{3})-(\\d{4})", replace: "***-***-$3") }',
+      );
+
+      expect(result).to.deep.equal({
+        data: { phone: '***-***-7890' },
+      });
+    });
+
+    it('does not mask when directive is not present', () => {
+      const result = executeTestQuery('{ email, phone }');
+
+      expect(result).to.deep.equal({
+        data: { email: 'user@example.com', phone: '123-456-7890' },
+      });
+    });
+
+    it('works with multiple directives', () => {
+      const result = executeTestQuery(
+        '{ a, b @include(if: true) @mask(regex: "(.)", replace: "$1$1") }',
+      );
+
+      expect(result).to.deep.equal({
+        data: { a: 'a', b: 'bb' },
       });
     });
   });
