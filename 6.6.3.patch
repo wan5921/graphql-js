@@ -1,0 +1,532 @@
+diff --git a/src/__tests__/userPostSchema-test.ts b/src/__tests__/userPostSchema-test.ts
+new file mode 100644
+index 00000000..95bdaae2
+--- /dev/null
++++ b/src/__tests__/userPostSchema-test.ts
+@@ -0,0 +1,343 @@
++import { describe, it, beforeEach } from 'node:test';
++import { expect } from 'chai';
++
++import { graphql } from '../graphql.ts';
++import { userPostSchema, resetData } from './userPostSchema.ts';
++
++describe('userPostSchema', () => {
++  beforeEach(() => {
++    resetData();
++  });
++
++  it('can create a user', async () => {
++    const query = `
++      mutation {
++        addUser(name: "Alice") {
++          id
++          name
++        }
++      }
++    `;
++    const result = await graphql({ schema: userPostSchema, source: query });
++    expect(result).to.deep.equal({
++      data: {
++        addUser: {
++          id: '1',
++          name: 'Alice',
++        },
++      },
++    });
++  });
++
++  it('can create a post for a user', async () => {
++    const addUserQuery = `
++      mutation {
++        addUser(name: "Alice") {
++          id
++        }
++      }
++    `;
++    await graphql({ schema: userPostSchema, source: addUserQuery });
++
++    const addPostQuery = `
++      mutation {
++        addPost(title: "Hello World", authorId: "1") {
++          id
++          title
++          authorId
++          author {
++            id
++            name
++          }
++        }
++      }
++    `;
++    const result = await graphql({ schema: userPostSchema, source: addPostQuery });
++    expect(result).to.deep.equal({
++      data: {
++        addPost: {
++          id: '1',
++          title: 'Hello World',
++          authorId: '1',
++          author: {
++            id: '1',
++            name: 'Alice',
++          },
++        },
++      },
++    });
++  });
++
++  it('returns error when creating a post for non-existent user', async () => {
++    const addPostQuery = `
++      mutation {
++        addPost(title: "Hello World", authorId: "999") {
++          id
++        }
++      }
++    `;
++    const result = await graphql({ schema: userPostSchema, source: addPostQuery });
++    expect(result.errors).to.exist;
++    expect(result.errors![0].message).to.equal('User with id 999 does not exist');
++  });
++
++  it('can query user by id and their posts', async () => {
++    await graphql({
++      schema: userPostSchema,
++      source: `mutation { addUser(name: "Alice") { id } }`,
++    });
++    await graphql({
++      schema: userPostSchema,
++      source: `mutation { addPost(title: "First Post", authorId: "1") { id } }`,
++    });
++    await graphql({
++      schema: userPostSchema,
++      source: `mutation { addPost(title: "Second Post", authorId: "1") { id } }`,
++    });
++
++    const query = `
++      query {
++        user(id: "1") {
++          id
++          name
++          posts {
++            id
++            title
++          }
++        }
++      }
++    `;
++    const result = await graphql({ schema: userPostSchema, source: query });
++    expect(result).to.deep.equal({
++      data: {
++        user: {
++          id: '1',
++          name: 'Alice',
++          posts: [
++            { id: '1', title: 'First Post' },
++            { id: '2', title: 'Second Post' },
++          ],
++        },
++      },
++    });
++  });
++
++  it('can query all posts', async () => {
++    await graphql({
++      schema: userPostSchema,
++      source: `mutation { addUser(name: "Alice") { id } }`,
++    });
++    await graphql({
++      schema: userPostSchema,
++      source: `mutation { addUser(name: "Bob") { id } }`,
++    });
++    await graphql({
++      schema: userPostSchema,
++      source: `mutation { addPost(title: "Alice Post", authorId: "1") { id } }`,
++    });
++    await graphql({
++      schema: userPostSchema,
++      source: `mutation { addPost(title: "Bob Post", authorId: "2") { id } }`,
++    });
++
++    const query = `
++      query {
++        posts {
++          id
++          title
++          author {
++            name
++          }
++        }
++      }
++    `;
++    const result = await graphql({ schema: userPostSchema, source: query });
++    expect(result).to.deep.equal({
++      data: {
++        posts: [
++          {
++            id: '1',
++            title: 'Alice Post',
++            author: { name: 'Alice' },
++          },
++          {
++            id: '2',
++            title: 'Bob Post',
++            author: { name: 'Bob' },
++          },
++        ],
++      },
++    });
++  });
++
++  it('can update a user', async () => {
++    await graphql({
++      schema: userPostSchema,
++      source: `mutation { addUser(name: "Alice") { id } }`,
++    });
++
++    const updateQuery = `
++      mutation {
++        updateUser(id: "1", name: "Alice Wonderland") {
++          id
++          name
++        }
++      }
++    `;
++    const result = await graphql({ schema: userPostSchema, source: updateQuery });
++    expect(result).to.deep.equal({
++      data: {
++        updateUser: {
++          id: '1',
++          name: 'Alice Wonderland',
++        },
++      },
++    });
++  });
++
++  it('returns error when updating non-existent user', async () => {
++    const updateQuery = `
++      mutation {
++        updateUser(id: "999", name: "Ghost") {
++          id
++        }
++      }
++    `;
++    const result = await graphql({ schema: userPostSchema, source: updateQuery });
++    expect(result.errors).to.exist;
++    expect(result.errors![0].message).to.equal('User with id 999 does not exist');
++  });
++
++  it('can delete a user and cascade delete posts', async () => {
++    await graphql({
++      schema: userPostSchema,
++      source: `mutation { addUser(name: "Alice") { id } }`,
++    });
++    await graphql({
++      schema: userPostSchema,
++      source: `mutation { addPost(title: "Alice Post", authorId: "1") { id } }`,
++    });
++
++    const deleteQuery = `
++      mutation {
++        deleteUser(id: "1") {
++          id
++          name
++        }
++      }
++    `;
++    const deleteResult = await graphql({ schema: userPostSchema, source: deleteQuery });
++    expect(deleteResult).to.deep.equal({
++      data: {
++        deleteUser: {
++          id: '1',
++          name: 'Alice',
++        },
++      },
++    });
++
++    // Check user is gone
++    const userResult = await graphql({
++      schema: userPostSchema,
++      source: `query { user(id: "1") { id } }`,
++    });
++    expect(userResult).to.deep.equal({
++      data: {
++        user: null,
++      },
++    });
++
++    // Check post is gone
++    const postsResult = await graphql({
++      schema: userPostSchema,
++      source: `query { posts { id } }`,
++    });
++    expect(postsResult).to.deep.equal({
++      data: {
++        posts: [],
++      },
++    });
++  });
++
++  it('can update a post', async () => {
++    await graphql({
++      schema: userPostSchema,
++      source: `mutation { addUser(name: "Alice") { id } }`,
++    });
++    await graphql({
++      schema: userPostSchema,
++      source: `mutation { addPost(title: "Old Title", authorId: "1") { id } }`,
++    });
++
++    const updatePostQuery = `
++      mutation {
++        updatePost(id: "1", title: "New Title") {
++          id
++          title
++        }
++      }
++    `;
++    const result = await graphql({ schema: userPostSchema, source: updatePostQuery });
++    expect(result).to.deep.equal({
++      data: {
++        updatePost: {
++          id: '1',
++          title: 'New Title',
++        },
++      },
++    });
++  });
++
++  it('returns error when updating non-existent post', async () => {
++    const updatePostQuery = `
++      mutation {
++        updatePost(id: "999", title: "Ghost Post") {
++          id
++        }
++      }
++    `;
++    const result = await graphql({ schema: userPostSchema, source: updatePostQuery });
++    expect(result.errors).to.exist;
++    expect(result.errors![0].message).to.equal('Post with id 999 does not exist');
++  });
++
++  it('can delete a post', async () => {
++    await graphql({
++      schema: userPostSchema,
++      source: `mutation { addUser(name: "Alice") { id } }`,
++    });
++    await graphql({
++      schema: userPostSchema,
++      source: `mutation { addPost(title: "Alice Post", authorId: "1") { id } }`,
++    });
++
++    const deletePostQuery = `
++      mutation {
++        deletePost(id: "1") {
++          id
++          title
++        }
++      }
++    `;
++    const result = await graphql({ schema: userPostSchema, source: deletePostQuery });
++    expect(result).to.deep.equal({
++      data: {
++        deletePost: {
++          id: '1',
++          title: 'Alice Post',
++        },
++      },
++    });
++
++    // Check post is gone
++    const postsResult = await graphql({
++      schema: userPostSchema,
++      source: `query { posts { id } }`,
++    });
++    expect(postsResult).to.deep.equal({
++      data: {
++        posts: [],
++      },
++    });
++  });
++});
+diff --git a/src/__tests__/userPostSchema.ts b/src/__tests__/userPostSchema.ts
+new file mode 100644
+index 00000000..6eea5007
+--- /dev/null
++++ b/src/__tests__/userPostSchema.ts
+@@ -0,0 +1,177 @@
++import {
++  GraphQLSchema,
++  GraphQLObjectType,
++  GraphQLString,
++  GraphQLID,
++  GraphQLList,
++  GraphQLNonNull,
++} from '../index.js';
++
++type User = {
++  id: string;
++  name: string;
++};
++
++type Post = {
++  id: string;
++  title: string;
++  authorId: string;
++};
++
++export const users: User[] = [];
++export const posts: Post[] = [];
++
++let userIdCounter = 1;
++let postIdCounter = 1;
++
++export const resetData = (): void => {
++  users.length = 0;
++  posts.length = 0;
++  userIdCounter = 1;
++  postIdCounter = 1;
++};
++
++const PostType: GraphQLObjectType = new GraphQLObjectType({
++  name: 'Post',
++  fields: () => ({
++    id: { type: new GraphQLNonNull(GraphQLID) },
++    title: { type: new GraphQLNonNull(GraphQLString) },
++    authorId: { type: new GraphQLNonNull(GraphQLID) },
++    author: {
++      type: UserType,
++      resolve: (post) => users.find((user) => user.id === post.authorId),
++    },
++  }),
++});
++
++const UserType: GraphQLObjectType = new GraphQLObjectType({
++  name: 'User',
++  fields: () => ({
++    id: { type: new GraphQLNonNull(GraphQLID) },
++    name: { type: new GraphQLNonNull(GraphQLString) },
++    posts: {
++      type: new GraphQLList(PostType),
++      resolve: (user) => posts.filter((post) => post.authorId === user.id),
++    },
++  }),
++});
++
++const QueryType = new GraphQLObjectType({
++  name: 'Query',
++  fields: {
++    user: {
++      type: UserType,
++      args: {
++        id: { type: new GraphQLNonNull(GraphQLID) },
++      },
++      resolve: (_, { id }) => users.find((user) => user.id === id) || null,
++    },
++    posts: {
++      type: new GraphQLList(PostType),
++      resolve: () => posts,
++    },
++  },
++});
++
++const MutationType = new GraphQLObjectType({
++  name: 'Mutation',
++  fields: {
++    addUser: {
++      type: UserType,
++      args: {
++        name: { type: new GraphQLNonNull(GraphQLString) },
++      },
++      resolve: (_, { name }) => {
++        const user = { id: String(userIdCounter++), name };
++        users.push(user);
++        return user;
++      },
++    },
++    updateUser: {
++      type: UserType,
++      args: {
++        id: { type: new GraphQLNonNull(GraphQLID) },
++        name: { type: new GraphQLNonNull(GraphQLString) },
++      },
++      resolve: (_, { id, name }) => {
++        const user = users.find((u) => u.id === id);
++        if (!user) {
++          throw new Error(`User with id ${id} does not exist`);
++        }
++        user.name = name;
++        return user;
++      },
++    },
++    deleteUser: {
++      type: UserType,
++      args: {
++        id: { type: new GraphQLNonNull(GraphQLID) },
++      },
++      resolve: (_, { id }) => {
++        const index = users.findIndex((u) => u.id === id);
++        if (index === -1) {
++          throw new Error(`User with id ${id} does not exist`);
++        }
++        const user = users[index];
++        users.splice(index, 1);
++        // Cascade delete posts
++        for (let i = posts.length - 1; i >= 0; i--) {
++          if (posts[i].authorId === id) {
++            posts.splice(i, 1);
++          }
++        }
++        return user;
++      },
++    },
++    addPost: {
++      type: PostType,
++      args: {
++        title: { type: new GraphQLNonNull(GraphQLString) },
++        authorId: { type: new GraphQLNonNull(GraphQLID) },
++      },
++      resolve: (_, { title, authorId }) => {
++        if (!users.find((u) => u.id === authorId)) {
++          throw new Error(`User with id ${authorId} does not exist`);
++        }
++        const post = { id: String(postIdCounter++), title, authorId };
++        posts.push(post);
++        return post;
++      },
++    },
++    updatePost: {
++      type: PostType,
++      args: {
++        id: { type: new GraphQLNonNull(GraphQLID) },
++        title: { type: new GraphQLNonNull(GraphQLString) },
++      },
++      resolve: (_, { id, title }) => {
++        const post = posts.find((p) => p.id === id);
++        if (!post) {
++          throw new Error(`Post with id ${id} does not exist`);
++        }
++        post.title = title;
++        return post;
++      },
++    },
++    deletePost: {
++      type: PostType,
++      args: {
++        id: { type: new GraphQLNonNull(GraphQLID) },
++      },
++      resolve: (_, { id }) => {
++        const index = posts.findIndex((p) => p.id === id);
++        if (index === -1) {
++          throw new Error(`Post with id ${id} does not exist`);
++        }
++        const post = posts[index];
++        posts.splice(index, 1);
++        return post;
++      },
++    },
++  },
++});
++
++export const userPostSchema: GraphQLSchema = new GraphQLSchema({
++  query: QueryType,
++  mutation: MutationType,
++});
