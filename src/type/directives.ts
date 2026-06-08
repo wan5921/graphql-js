@@ -352,6 +352,24 @@ export const GraphQLSkipDirective: GraphQLDirective = new GraphQLDirective({
   },
 });
 
+/** Used to mask string fields using a regular expression. */
+export const GraphQLMaskDirective: GraphQLDirective = new GraphQLDirective({
+  name: 'mask',
+  description: 'Directs the executor to mask the string value of a field.',
+  locations: [DirectiveLocation.FIELD],
+  args: {
+    regex: {
+      type: new GraphQLNonNull(GraphQLString),
+      description: 'The regular expression to match against the string value.',
+    },
+    replace: {
+      type: new GraphQLNonNull(GraphQLString),
+      description: 'The replacement string.',
+    },
+  },
+});
+
+
 /**
  * Experimental directive used to conditionally defer fragments.
  *
@@ -487,6 +505,7 @@ export const specifiedDirectives: ReadonlyArray<GraphQLDirective> =
   Object.freeze([
     GraphQLIncludeDirective,
     GraphQLSkipDirective,
+    GraphQLMaskDirective,
     GraphQLDeprecatedDirective,
     GraphQLSpecifiedByDirective,
     GraphQLOneOfDirective,

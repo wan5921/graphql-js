@@ -72,7 +72,8 @@ import type { StreamUsage } from './getStreamUsage.ts';
 import { getStreamUsage as _getStreamUsage } from './getStreamUsage.ts';
 import { runAsyncWorkFinishedHook } from './hooks.ts';
 import { returnIteratorCatchingErrors } from './returnIteratorCatchingErrors.ts';
-import { getArgumentValues } from './values.ts';
+import { getArgumentValues, getDirectiveValues } from './values.ts';
+import { GraphQLMaskDirective } from '../type/directives.ts';
 
 /* eslint-disable max-params */
 // This file contains a lot of such errors but we plan to refactor it anyway
@@ -814,7 +815,27 @@ export class Executor<
     // If field type is a leaf type, Scalar or Enum, coerce to a valid value,
     // returning null if coercion is not possible.
     if (isLeafType(returnType)) {
-      return this.completeLeafValue(returnType, result);
+      const completed = this.completeLeafValue(returnType, result);
+      if (typeof completed === 'string') {
+        const firstFieldDetails = fieldDetailsList[0];
+        const maskDirectiveNode = firstFieldDetails.node.directives?.find(
+          (directive) => directive.name.value === 'mask',
+        );
+        if (maskDirectiveNode) {
+          const maskArgs = getDirectiveValues(
+            GraphQLMaskDirective,
+            firstFieldDetails.node,
+            this.validatedExecutionArgs.variableValues,
+            firstFieldDetails.fragmentVariableValues,
+            this.validatedExecutionArgs.hideSuggestions,
+          );
+          if (maskArgs && typeof maskArgs.regex === 'string' && typeof maskArgs.replace === 'string') {
+            const regex = new RegExp(maskArgs.regex, 'g');
+            return completed.replace(regex, maskArgs.replace);
+          }
+        }
+      }
+      return completed;
     }
 
     // If field type is an abstract type, Interface or Union, determine the

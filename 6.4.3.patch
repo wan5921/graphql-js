@@ -1,0 +1,169 @@
+diff --git a/src/execution/Executor.ts b/src/execution/Executor.ts
+index 88163c71..f08646e0 100644
+--- a/src/execution/Executor.ts
++++ b/src/execution/Executor.ts
+@@ -72,7 +72,8 @@ import type { StreamUsage } from './getStreamUsage.ts';
+ import { getStreamUsage as _getStreamUsage } from './getStreamUsage.ts';
+ import { runAsyncWorkFinishedHook } from './hooks.ts';
+ import { returnIteratorCatchingErrors } from './returnIteratorCatchingErrors.ts';
+-import { getArgumentValues } from './values.ts';
++import { getArgumentValues, getDirectiveValues } from './values.ts';
++import { GraphQLMaskDirective } from '../type/directives.ts';
+ 
+ /* eslint-disable max-params */
+ // This file contains a lot of such errors but we plan to refactor it anyway
+@@ -814,7 +815,27 @@ export class Executor<
+     // If field type is a leaf type, Scalar or Enum, coerce to a valid value,
+     // returning null if coercion is not possible.
+     if (isLeafType(returnType)) {
+-      return this.completeLeafValue(returnType, result);
++      const completed = this.completeLeafValue(returnType, result);
++      if (typeof completed === 'string') {
++        const firstFieldDetails = fieldDetailsList[0];
++        const maskDirectiveNode = firstFieldDetails.node.directives?.find(
++          (directive) => directive.name.value === 'mask',
++        );
++        if (maskDirectiveNode) {
++          const maskArgs = getDirectiveValues(
++            GraphQLMaskDirective,
++            firstFieldDetails.node,
++            this.validatedExecutionArgs.variableValues,
++            firstFieldDetails.fragmentVariableValues,
++            this.validatedExecutionArgs.hideSuggestions,
++          );
++          if (maskArgs && typeof maskArgs.regex === 'string' && typeof maskArgs.replace === 'string') {
++            const regex = new RegExp(maskArgs.regex, 'g');
++            return completed.replace(regex, maskArgs.replace);
++          }
++        }
++      }
++      return completed;
+     }
+ 
+     // If field type is an abstract type, Interface or Union, determine the
+diff --git a/src/execution/__tests__/directives-test.ts b/src/execution/__tests__/directives-test.ts
+index 4a43d335..4b1710e5 100644
+--- a/src/execution/__tests__/directives-test.ts
++++ b/src/execution/__tests__/directives-test.ts
+@@ -8,6 +8,8 @@ import { GraphQLObjectType } from '../../type/definition.ts';
+ import { GraphQLString } from '../../type/scalars.ts';
+ import { GraphQLSchema } from '../../type/schema.ts';
+ 
++import { buildSchema } from '../../utilities/buildASTSchema.ts';
++
+ import { executeSync } from '../execute.ts';
+ 
+ const schema = new GraphQLSchema({
+@@ -79,6 +81,51 @@ describe('Execute: handles directives', () => {
+     });
+   });
+ 
++  describe('works on mask directive', () => {
++    it('masks string field using regex and replace', () => {
++      const result = executeTestQuery(
++        '{ a @mask(regex: "a", replace: "masked") }',
++      );
++
++      expect(result).to.deep.equal({
++        data: { a: 'masked' },
++      });
++    });
++
++    it('does not mask non-string fields or non-matching strings', () => {
++      const result = executeTestQuery(
++        '{ b @mask(regex: "x", replace: "y") }',
++      );
++
++      expect(result).to.deep.equal({
++        data: { b: 'b' },
++      });
++    });
++
++    it('works with buildSchema', () => {
++      const builtSchema = buildSchema(`
++        type Query {
++          a: String
++          b: String
++        }
++      `);
++
++      const root = { a: () => 'hello world', b: () => 'hello world' };
++
++      const document1 = parse('{ a @mask(regex: "world", replace: "graphql") }');
++      const result1 = executeSync({ schema: builtSchema, document: document1, rootValue: root });
++      expect(result1).to.deep.equal({
++        data: { a: 'hello graphql' },
++      });
++
++      const document2 = parse('{ a }');
++      const result2 = executeSync({ schema: builtSchema, document: document2, rootValue: root });
++      expect(result2).to.deep.equal({
++        data: { a: 'hello world' },
++      });
++    });
++  });
++
+   describe('works on fragment spreads', () => {
+     it('if false omits fragment spread', () => {
+       const result = executeTestQuery(`
+diff --git a/src/index.ts b/src/index.ts
+index 219478ad..3007c76a 100644
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -90,6 +90,7 @@ export {
+   specifiedDirectives,
+   GraphQLIncludeDirective,
+   GraphQLSkipDirective,
++  GraphQLMaskDirective,
+   GraphQLDeferDirective,
+   GraphQLStreamDirective,
+   GraphQLDeprecatedDirective,
+diff --git a/src/type/directives.ts b/src/type/directives.ts
+index 895a3c8b..ae8dc7cd 100644
+--- a/src/type/directives.ts
++++ b/src/type/directives.ts
+@@ -352,6 +352,24 @@ export const GraphQLSkipDirective: GraphQLDirective = new GraphQLDirective({
+   },
+ });
+ 
++/** Used to mask string fields using a regular expression. */
++export const GraphQLMaskDirective: GraphQLDirective = new GraphQLDirective({
++  name: 'mask',
++  description: 'Directs the executor to mask the string value of a field.',
++  locations: [DirectiveLocation.FIELD],
++  args: {
++    regex: {
++      type: new GraphQLNonNull(GraphQLString),
++      description: 'The regular expression to match against the string value.',
++    },
++    replace: {
++      type: new GraphQLNonNull(GraphQLString),
++      description: 'The replacement string.',
++    },
++  },
++});
++
++
+ /**
+  * Experimental directive used to conditionally defer fragments.
+  *
+@@ -487,6 +505,7 @@ export const specifiedDirectives: ReadonlyArray<GraphQLDirective> =
+   Object.freeze([
+     GraphQLIncludeDirective,
+     GraphQLSkipDirective,
++    GraphQLMaskDirective,
+     GraphQLDeprecatedDirective,
+     GraphQLSpecifiedByDirective,
+     GraphQLOneOfDirective,
+diff --git a/src/type/index.ts b/src/type/index.ts
+index 0f7f6206..cc8675bd 100644
+--- a/src/type/index.ts
++++ b/src/type/index.ts
+@@ -155,6 +155,7 @@ export {
+   specifiedDirectives,
+   GraphQLIncludeDirective,
+   GraphQLSkipDirective,
++  GraphQLMaskDirective,
+   GraphQLDeferDirective,
+   GraphQLStreamDirective,
+   GraphQLDeprecatedDirective,
