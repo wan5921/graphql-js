@@ -1,0 +1,295 @@
+diff --git a/src/__tests__/userPostData.ts b/src/__tests__/userPostData.ts
+new file mode 100644
+index 00000000..18d2319f
+--- /dev/null
++++ b/src/__tests__/userPostData.ts
+@@ -0,0 +1,74 @@
++export interface User {
++  id: number;
++  name: string;
++}
++
++interface PostRecord {
++  id: number;
++  title: string;
++  userId: number;
++}
++
++const initialUsers: Array<User> = [{ id: 1, name: 'Ada' }];
++const initialPosts: Array<PostRecord> = [
++  { id: 1, title: 'Hello GraphQL', userId: 1 },
++];
++
++const userData = new Map<number, User>();
++const postData = new Map<number, PostRecord>();
++
++let nextUserId = 1;
++let nextPostId = 1;
++
++export function resetUserPostData(): void {
++  userData.clear();
++  postData.clear();
++
++  for (const user of initialUsers) {
++    userData.set(user.id, user);
++  }
++
++  for (const post of initialPosts) {
++    postData.set(post.id, post);
++  }
++
++  nextUserId = initialUsers.length + 1;
++  nextPostId = initialPosts.length + 1;
++}
++
++resetUserPostData();
++
++export function getUser(id: number): User | null {
++  return userData.get(id) ?? null;
++}
++
++export function getPosts(): Array<PostRecord> {
++  return Array.from(postData.values());
++}
++
++export function addUser(name: string): User {
++  const user = {
++    id: nextUserId++,
++    name,
++  };
++
++  userData.set(user.id, user);
++
++  return user;
++}
++
++export function addPost(title: string, userId: number): PostRecord | null {
++  if (!userData.has(userId)) {
++    return null;
++  }
++
++  const post = {
++    id: nextPostId++,
++    title,
++    userId,
++  };
++
++  postData.set(post.id, post);
++
++  return post;
++}
+diff --git a/src/__tests__/userPostSchema-test.ts b/src/__tests__/userPostSchema-test.ts
+new file mode 100644
+index 00000000..d0e32767
+--- /dev/null
++++ b/src/__tests__/userPostSchema-test.ts
+@@ -0,0 +1,117 @@
++import { describe, it } from 'node:test';
++
++import { expect } from 'chai';
++
++import { graphql } from '../graphql.ts';
++
++import { resetUserPostData } from './userPostData.ts';
++import { UserPostSchema as schema } from './userPostSchema.ts';
++
++describe('UserPostSchema', () => {
++  it('supports querying a user and all posts', async () => {
++    resetUserPostData();
++
++    const source = `
++      {
++        user(id: 1) {
++          id
++          name
++        }
++        posts {
++          id
++          title
++        }
++      }
++    `;
++
++    const result = await graphql({ schema, source });
++
++    expect(result).to.deep.equal({
++      data: {
++        user: {
++          id: 1,
++          name: 'Ada',
++        },
++        posts: [
++          {
++            id: 1,
++            title: 'Hello GraphQL',
++          },
++        ],
++      },
++    });
++  });
++
++  it('supports adding users and posts through mutations', async () => {
++    resetUserPostData();
++
++    const addUserResult = await graphql({
++      schema,
++      source: `
++        mutation {
++          addUser(name: "Grace") {
++            id
++            name
++          }
++        }
++      `,
++    });
++
++    expect(addUserResult).to.deep.equal({
++      data: {
++        addUser: {
++          id: 2,
++          name: 'Grace',
++        },
++      },
++    });
++
++    const addPostResult = await graphql({
++      schema,
++      source: `
++        mutation {
++          addPost(title: "Typed Schema", userId: 2) {
++            id
++            title
++          }
++        }
++      `,
++    });
++
++    expect(addPostResult).to.deep.equal({
++      data: {
++        addPost: {
++          id: 2,
++          title: 'Typed Schema',
++        },
++      },
++    });
++
++    const postsResult = await graphql({
++      schema,
++      source: `
++        {
++          posts {
++            id
++            title
++          }
++        }
++      `,
++    });
++
++    expect(postsResult).to.deep.equal({
++      data: {
++        posts: [
++          {
++            id: 1,
++            title: 'Hello GraphQL',
++          },
++          {
++            id: 2,
++            title: 'Typed Schema',
++          },
++        ],
++      },
++    });
++  });
++});
+diff --git a/src/__tests__/userPostSchema.ts b/src/__tests__/userPostSchema.ts
+new file mode 100644
+index 00000000..9007287b
+--- /dev/null
++++ b/src/__tests__/userPostSchema.ts
+@@ -0,0 +1,86 @@
++import {
++  GraphQLInt,
++  GraphQLList,
++  GraphQLNonNull,
++  GraphQLObjectType,
++  GraphQLSchema,
++  GraphQLString,
++} from '../index.ts';
++
++import { addPost, addUser, getPosts, getUser } from './userPostData.ts';
++
++const userType = new GraphQLObjectType({
++  name: 'User',
++  fields: () => ({
++    id: {
++      type: new GraphQLNonNull(GraphQLInt),
++    },
++    name: {
++      type: GraphQLString,
++    },
++  }),
++});
++
++const postType = new GraphQLObjectType({
++  name: 'Post',
++  fields: () => ({
++    id: {
++      type: new GraphQLNonNull(GraphQLInt),
++    },
++    title: {
++      type: GraphQLString,
++    },
++  }),
++});
++
++const queryType = new GraphQLObjectType({
++  name: 'Query',
++  fields: () => ({
++    user: {
++      type: userType,
++      args: {
++        id: {
++          type: new GraphQLNonNull(GraphQLInt),
++        },
++      },
++      resolve: (_source, { id }) => getUser(id),
++    },
++    posts: {
++      type: new GraphQLNonNull(new GraphQLList(new GraphQLNonNull(postType))),
++      resolve: () => getPosts(),
++    },
++  }),
++});
++
++const mutationType = new GraphQLObjectType({
++  name: 'Mutation',
++  fields: () => ({
++    addUser: {
++      type: userType,
++      args: {
++        name: {
++          type: new GraphQLNonNull(GraphQLString),
++        },
++      },
++      resolve: (_source, { name }) => addUser(name),
++    },
++    addPost: {
++      type: postType,
++      args: {
++        title: {
++          type: new GraphQLNonNull(GraphQLString),
++        },
++        userId: {
++          type: new GraphQLNonNull(GraphQLInt),
++        },
++      },
++      resolve: (_source, { title, userId }) => addPost(title, userId),
++    },
++  }),
++});
++
++export const UserPostSchema: GraphQLSchema = new GraphQLSchema({
++  query: queryType,
++  mutation: mutationType,
++  types: [userType, postType],
++});
