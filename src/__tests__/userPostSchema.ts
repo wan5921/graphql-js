@@ -1,0 +1,883 @@
+import { describe, it } from 'node:test';
+
+import { expect } from 'chai';
+
+import { graphql } from '../graphql.ts';
+
+import {
+  GraphQLList,
+  GraphQLNonNull,
+  GraphQLObjectType,
+} from '../type/definition.ts';
+import { GraphQLID, GraphQLInt, GraphQLString } from '../type/scalars.ts';
+import { GraphQLSchema } from '../type/schema.ts';
+
+interface UserType {
+  id: string;
+  name: string;
+  email: string;
+  age: number;
+}
+
+interface PostType {
+  id: string;
+  title: string;
+  content: string;
+  authorId: string;
+}
+
+const users: Map<string, UserType> = new Map();
+const posts: Map<string, PostType> = new Map();
+let nextUserId = 1;
+let nextPostId = 1;
+
+const PostTypeObj = new GraphQLObjectType({
+  name: 'Post',
+  fields: () => ({
+    id: { type: new GraphQLNonNull(GraphQLID) },
+    title: { type: new GraphQLNonNull(GraphQLString) },
+    content: { type: GraphQLString },
+    authorId: { type: new GraphQLNonNull(GraphQLID) },
+  }),
+});
+
+const UserTypeObj = new GraphQLObjectType({
+  name: 'User',
+  fields: () => ({
+    id: { type: new GraphQLNonNull(GraphQLID) },
+    name: { type: new GraphQLNonNull(GraphQLString) },
+    email: { type: new GraphQLNonNull(GraphQLString) },
+    age: { type: GraphQLInt },
+  }),
+});
+
+const QueryType = new GraphQLObjectType({
+  name: 'Query',
+  fields: {
+    user: {
+      type: UserTypeObj,
+      args: {
+        id: { type: new GraphQLNonNull(GraphQLID) },
+      },
+      resolve: (_source, { id }) => {
+        return users.get(id) || null;
+      },
+    },
+    users: {
+      type: new GraphQLList(UserTypeObj),
+      resolve: () => {
+        return Array.from(users.values());
+      },
+    },
+    post: {
+      type: PostTypeObj,
+      args: {
+        id: { type: new GraphQLNonNull(GraphQLID) },
+      },
+      resolve: (_source, { id }) => {
+        return posts.get(id) || null;
+      },
+    },
+    posts: {
+      type: new GraphQLList(PostTypeObj),
+      args: {
+        authorId: { type: GraphQLID },
+      },
+      resolve: (_source, { authorId }) => {
+        const allPosts = Array.from(posts.values());
+        if (authorId) {
+          return allPosts.filter((p) => p.authorId === authorId);
+        }
+        return allPosts;
+      },
+    },
+  },
+});
+
+const MutationType = new GraphQLObjectType({
+  name: 'Mutation',
+  fields: {
+    addUser: {
+      type: UserTypeObj,
+      args: {
+        name: { type: new GraphQLNonNull(GraphQLString) },
+        email: { type: new GraphQLNonNull(GraphQLString) },
+        age: { type: GraphQLInt },
+      },
+      resolve: (_source, { name, email, age }) => {
+        const id = String(nextUserId++);
+        const user: UserType = { id, name, email, age: age ?? 0 };
+        users.set(id, user);
+        return user;
+      },
+    },
+    updateUser: {
+      type: UserTypeObj,
+      args: {
+        id: { type: new GraphQLNonNull(GraphQLID) },
+        name: { type: GraphQLString },
+        email: { type: GraphQLString },
+        age: { type: GraphQLInt },
+      },
+      resolve: (_source, { id, name, email, age }) => {
+        const user = users.get(id);
+        if (!user) {
+          throw new Error(`User with id ${id} not found`);
+        }
+        const updated: UserType = {
+          id,
+          name: name ?? user.name,
+          email: email ?? user.email,
+          age: age ?? user.age,
+        };
+        users.set(id, updated);
+        return updated;
+      },
+    },
+    deleteUser: {
+      type: UserTypeObj,
+      args: {
+        id: { type: new GraphQLNonNull(GraphQLID) },
+      },
+      resolve: (_source, { id }) => {
+        const user = users.get(id);
+        if (!user) {
+          throw new Error(`User with id ${id} not found`);
+        }
+        users.delete(id);
+        return user;
+      },
+    },
+    addPost: {
+      type: PostTypeObj,
+      args: {
+        title: { type: new GraphQLNonNull(GraphQLString) },
+        content: { type: GraphQLString },
+        authorId: { type: new GraphQLNonNull(GraphQLID) },
+      },
+      resolve: (_source, { title, content, authorId }) => {
+        const id = String(nextPostId++);
+        const post: PostType = { id, title, content: content ?? '', authorId };
+        posts.set(id, post);
+        return post;
+      },
+    },
+    updatePost: {
+      type: PostTypeObj,
+      args: {
+        id: { type: new GraphQLNonNull(GraphQLID) },
+        title: { type: GraphQLString },
+        content: { type: GraphQLString },
+      },
+      resolve: (_source, { id, title, content }) => {
+        const post = posts.get(id);
+        if (!post) {
+          throw new Error(`Post with id ${id} not found`);
+        }
+        const updated: PostType = {
+          id,
+          title: title ?? post.title,
+          content: content ?? post.content,
+          authorId: post.authorId,
+        };
+        posts.set(id, updated);
+        return updated;
+      },
+    },
+    deletePost: {
+      type: PostTypeObj,
+      args: {
+        id: { type: new GraphQLNonNull(GraphQLID) },
+      },
+      resolve: (_source, { id }) => {
+        const post = posts.get(id);
+        if (!post) {
+          throw new Error(`Post with id ${id} not found`);
+        }
+        posts.delete(id);
+        return post;
+      },
+    },
+  },
+});
+
+const schema = new GraphQLSchema({
+  query: QueryType,
+  mutation: MutationType,
+});
+
+describe('User CRUD Operations', () => {
+  describe('addUser', () => {
+    it('creates a new user and returns the user data', async () => {
+      const result = await graphql({
+        schema,
+        source: `
+          mutation {
+            addUser(name: "Alice", email: "alice@example.com", age: 30) {
+              id
+              name
+              email
+              age
+            }
+          }
+        `,
+      });
+
+      expect(result.errors).to.equal(undefined);
+      expect(result.data?.addUser).to.deep.equal({
+        id: '1',
+        name: 'Alice',
+        email: 'alice@example.com',
+        age: 30,
+      });
+    });
+
+    it('creates a user without age and defaults to 0', async () => {
+      const result = await graphql({
+        schema,
+        source: `
+          mutation {
+            addUser(name: "Bob", email: "bob@example.com") {
+              id
+              name
+              email
+              age
+            }
+          }
+        `,
+      });
+
+      expect(result.errors).to.equal(undefined);
+      expect(result.data?.addUser).to.deep.equal({
+        id: '2',
+        name: 'Bob',
+        email: 'bob@example.com',
+        age: 0,
+      });
+    });
+
+    it('returns error when required fields are missing', async () => {
+      const result = await graphql({
+        schema,
+        source: `
+          mutation {
+            addUser(email: "noname@example.com") {
+              id
+            }
+          }
+        `,
+      });
+
+      expect(result.errors).to.not.equal(undefined);
+      expect(result.errors?.length).to.equal(1);
+      expect(result.errors?.[0]?.message).to.include(
+        'Field "addUser" argument "name" of type "String!" is required',
+      );
+    });
+  });
+
+  describe('user(id)', () => {
+    it('returns a user by id', async () => {
+      await graphql({
+        schema,
+        source: `
+          mutation {
+            addUser(name: "Charlie", email: "charlie@example.com", age: 25) {
+              id
+            }
+          }
+        `,
+      });
+
+      const result = await graphql({
+        schema,
+        source: `
+          query {
+            user(id: "3") {
+              id
+              name
+              email
+              age
+            }
+          }
+        `,
+      });
+
+      expect(result.errors).to.equal(undefined);
+      expect(result.data?.user).to.deep.equal({
+        id: '3',
+        name: 'Charlie',
+        email: 'charlie@example.com',
+        age: 25,
+      });
+    });
+
+    it('returns null for non-existent user', async () => {
+      const result = await graphql({
+        schema,
+        source: `
+          query {
+            user(id: "999") {
+              id
+              name
+            }
+          }
+        `,
+      });
+
+      expect(result.errors).to.equal(undefined);
+      expect(result.data?.user).to.equal(null);
+    });
+
+    it('returns error when id argument is missing', async () => {
+      const result = await graphql({
+        schema,
+        source: `
+          query {
+            user {
+              id
+            }
+          }
+        `,
+      });
+
+      expect(result.errors).to.not.equal(undefined);
+      expect(result.errors?.[0]?.message).to.include(
+        'Field "user" argument "id" of type "ID!" is required',
+      );
+    });
+  });
+
+  describe('updateUser', () => {
+    it('updates an existing user', async () => {
+      await graphql({
+        schema,
+        source: `
+          mutation {
+            addUser(name: "Dave", email: "dave@example.com", age: 40) {
+              id
+            }
+          }
+        `,
+      });
+
+      const result = await graphql({
+        schema,
+        source: `
+          mutation {
+            updateUser(id: "4", name: "Dave Updated", age: 41) {
+              id
+              name
+              email
+              age
+            }
+          }
+        `,
+      });
+
+      expect(result.errors).to.equal(undefined);
+      expect(result.data?.updateUser).to.deep.equal({
+        id: '4',
+        name: 'Dave Updated',
+        email: 'dave@example.com',
+        age: 41,
+      });
+    });
+
+    it('returns error when updating non-existent user', async () => {
+      const result = await graphql({
+        schema,
+        source: `
+          mutation {
+            updateUser(id: "999", name: "Nobody") {
+              id
+            }
+          }
+        `,
+      });
+
+      expect(result.errors).to.not.equal(undefined);
+      expect(result.errors?.[0]?.message).to.include(
+        'User with id 999 not found',
+      );
+    });
+  });
+
+  describe('deleteUser', () => {
+    it('deletes an existing user and returns the deleted user', async () => {
+      await graphql({
+        schema,
+        source: `
+          mutation {
+            addUser(name: "Eve", email: "eve@example.com", age: 35) {
+              id
+            }
+          }
+        `,
+      });
+
+      const result = await graphql({
+        schema,
+        source: `
+          mutation {
+            deleteUser(id: "5") {
+              id
+              name
+              email
+            }
+          }
+        `,
+      });
+
+      expect(result.errors).to.equal(undefined);
+      expect(result.data?.deleteUser).to.deep.equal({
+        id: '5',
+        name: 'Eve',
+        email: 'eve@example.com',
+      });
+
+      const verifyResult = await graphql({
+        schema,
+        source: `
+          query {
+            user(id: "5") {
+              id
+            }
+          }
+        `,
+      });
+
+      expect(verifyResult.errors).to.equal(undefined);
+      expect(verifyResult.data?.user).to.equal(null);
+    });
+
+    it('returns error when deleting non-existent user', async () => {
+      const result = await graphql({
+        schema,
+        source: `
+          mutation {
+            deleteUser(id: "999") {
+              id
+            }
+          }
+        `,
+      });
+
+      expect(result.errors).to.not.equal(undefined);
+      expect(result.errors?.[0]?.message).to.include(
+        'User with id 999 not found',
+      );
+    });
+  });
+});
+
+describe('Post CRUD Operations', () => {
+  describe('addPost', () => {
+    it('creates a new post and returns the post data', async () => {
+      const result = await graphql({
+        schema,
+        source: `
+          mutation {
+            addPost(
+              title: "First Post"
+              content: "Hello World"
+              authorId: "1"
+            ) {
+              id
+              title
+              content
+              authorId
+            }
+          }
+        `,
+      });
+
+      expect(result.errors).to.equal(undefined);
+      expect(result.data?.addPost).to.deep.equal({
+        id: '1',
+        title: 'First Post',
+        content: 'Hello World',
+        authorId: '1',
+      });
+    });
+
+    it('creates a post without content and defaults to empty string', async () => {
+      const result = await graphql({
+        schema,
+        source: `
+          mutation {
+            addPost(title: "Minimal Post", authorId: "1") {
+              id
+              title
+              content
+              authorId
+            }
+          }
+        `,
+      });
+
+      expect(result.errors).to.equal(undefined);
+      expect(result.data?.addPost).to.deep.equal({
+        id: '2',
+        title: 'Minimal Post',
+        content: '',
+        authorId: '1',
+      });
+    });
+
+    it('returns error when required fields are missing', async () => {
+      const result = await graphql({
+        schema,
+        source: `
+          mutation {
+            addPost(content: "No title", authorId: "1") {
+              id
+            }
+          }
+        `,
+      });
+
+      expect(result.errors).to.not.equal(undefined);
+      expect(result.errors?.[0]?.message).to.include(
+        'Field "addPost" argument "title" of type "String!" is required',
+      );
+    });
+  });
+
+  describe('posts', () => {
+    it('returns all posts', async () => {
+      await graphql({
+        schema,
+        source: `
+          mutation {
+            addPost(title: "Post A", content: "Content A", authorId: "1") {
+              id
+            }
+          }
+        `,
+      });
+
+      await graphql({
+        schema,
+        source: `
+          mutation {
+            addPost(title: "Post B", content: "Content B", authorId: "2") {
+              id
+            }
+          }
+        `,
+      });
+
+      const result = await graphql({
+        schema,
+        source: `
+          query {
+            posts {
+              id
+              title
+              content
+              authorId
+            }
+          }
+        `,
+      });
+
+      expect(result.errors).to.equal(undefined);
+      expect(result.data?.posts).to.be.an('array');
+      expect(result.data?.posts).to.have.length.greaterThan(0);
+
+      const titles = (result.data?.posts as Array<{ title: string }>).map(
+        (p) => p.title,
+      );
+      expect(titles).to.include('Post A');
+      expect(titles).to.include('Post B');
+    });
+
+    it('filters posts by authorId', async () => {
+      const result = await graphql({
+        schema,
+        source: `
+          query {
+            posts(authorId: "1") {
+              id
+              title
+              authorId
+            }
+          }
+        `,
+      });
+
+      expect(result.errors).to.equal(undefined);
+      expect(result.data?.posts).to.be.an('array');
+
+      for (const post of result.data?.posts as Array<{ authorId: string }>) {
+        expect(post.authorId).to.equal('1');
+      }
+    });
+
+    it('returns empty list when no posts match filter', async () => {
+      const result = await graphql({
+        schema,
+        source: `
+          query {
+            posts(authorId: "nonexistent") {
+              id
+            }
+          }
+        `,
+      });
+
+      expect(result.errors).to.equal(undefined);
+      expect(result.data?.posts).to.deep.equal([]);
+    });
+  });
+
+  describe('updatePost', () => {
+    it('updates an existing post', async () => {
+      await graphql({
+        schema,
+        source: `
+          mutation {
+            addPost(title: "Original", content: "Original Content", authorId: "1") {
+              id
+            }
+          }
+        `,
+      });
+
+      const result = await graphql({
+        schema,
+        source: `
+          mutation {
+            updatePost(id: "5", title: "Updated", content: "Updated Content") {
+              id
+              title
+              content
+              authorId
+            }
+          }
+        `,
+      });
+
+      expect(result.errors).to.equal(undefined);
+      expect(result.data?.updatePost).to.deep.equal({
+        id: '5',
+        title: 'Updated',
+        content: 'Updated Content',
+        authorId: '1',
+      });
+    });
+
+    it('returns error when updating non-existent post', async () => {
+      const result = await graphql({
+        schema,
+        source: `
+          mutation {
+            updatePost(id: "999", title: "Ghost") {
+              id
+            }
+          }
+        `,
+      });
+
+      expect(result.errors).to.not.equal(undefined);
+      expect(result.errors?.[0]?.message).to.include(
+        'Post with id 999 not found',
+      );
+    });
+  });
+
+  describe('deletePost', () => {
+    it('deletes an existing post and returns the deleted post', async () => {
+      await graphql({
+        schema,
+        source: `
+          mutation {
+            addPost(title: "To Delete", content: "Will be deleted", authorId: "1") {
+              id
+            }
+          }
+        `,
+      });
+
+      const result = await graphql({
+        schema,
+        source: `
+          mutation {
+            deletePost(id: "6") {
+              id
+              title
+              content
+            }
+          }
+        `,
+      });
+
+      expect(result.errors).to.equal(undefined);
+      expect(result.data?.deletePost).to.deep.equal({
+        id: '6',
+        title: 'To Delete',
+        content: 'Will be deleted',
+      });
+
+      const verifyResult = await graphql({
+        schema,
+        source: `
+          query {
+            post(id: "6") {
+              id
+            }
+          }
+        `,
+      });
+
+      expect(verifyResult.errors).to.equal(undefined);
+      expect(verifyResult.data?.post).to.equal(null);
+    });
+
+    it('returns error when deleting non-existent post', async () => {
+      const result = await graphql({
+        schema,
+        source: `
+          mutation {
+            deletePost(id: "999") {
+              id
+            }
+          }
+        `,
+      });
+
+      expect(result.errors).to.not.equal(undefined);
+      expect(result.errors?.[0]?.message).to.include(
+        'Post with id 999 not found',
+      );
+    });
+  });
+});
+
+describe('User and Post Integration', () => {
+  it('queries user and their posts together', async () => {
+    await graphql({
+      schema,
+      source: `
+        mutation {
+          addUser(name: "Frank", email: "frank@example.com", age: 28) {
+            id
+          }
+        }
+      `,
+    });
+
+    await graphql({
+      schema,
+      source: `
+        mutation {
+          addPost(title: "Frank Post 1", content: "Content 1", authorId: "7") {
+            id
+          }
+        }
+      `,
+    });
+
+    await graphql({
+      schema,
+      source: `
+        mutation {
+          addPost(title: "Frank Post 2", content: "Content 2", authorId: "7") {
+            id
+          }
+        }
+      `,
+    });
+
+    const userResult = await graphql({
+      schema,
+      source: `
+        query {
+          user(id: "7") {
+            id
+            name
+            email
+          }
+        }
+      `,
+    });
+
+    const postsResult = await graphql({
+      schema,
+      source: `
+        query {
+          posts(authorId: "7") {
+            id
+            title
+            content
+          }
+        }
+      `,
+    });
+
+    expect(userResult.errors).to.equal(undefined);
+    expect(userResult.data?.user).to.deep.equal({
+      id: '7',
+      name: 'Frank',
+      email: 'frank@example.com',
+    });
+
+    expect(postsResult.errors).to.equal(undefined);
+    expect(postsResult.data?.posts).to.have.length(2);
+  });
+
+  it('handles multiple operations in sequence correctly', async () => {
+    const addResult = await graphql({
+      schema,
+      source: `
+        mutation {
+          addUser(name: "Grace", email: "grace@example.com", age: 32) {
+            id
+          }
+        }
+      `,
+    });
+
+    const userId = (addResult.data?.addUser as { id: string }).id;
+
+    const postResult = await graphql({
+      schema,
+      source: `
+        mutation ($authorId: ID!) {
+          addPost(title: "Grace Post", content: "Grace Content", authorId: $authorId) {
+            id
+            title
+            authorId
+          }
+        }
+      `,
+      variableValues: { authorId: userId },
+    });
+
+    expect(postResult.errors).to.equal(undefined);
+    expect((postResult.data?.addPost as { authorId: string }).authorId).to.equal(userId);
+
+    const queryResult = await graphql({
+      schema,
+      source: `
+        query ($userId: ID!) {
+          user(id: $userId) {
+            name
+          }
+          posts(authorId: $userId) {
+            title
+          }
+        }
+      `,
+      variableValues: { userId },
+    });
+
+    expect(queryResult.errors).to.equal(undefined);
+    expect((queryResult.data?.user as { name: string }).name).to.equal('Grace');
+    expect(queryResult.data?.posts).to.have.length(1);
+    expect(
+      (queryResult.data?.posts as Array<{ title: string }>)[0].title,
+    ).to.equal('Grace Post');
+  });
+});
