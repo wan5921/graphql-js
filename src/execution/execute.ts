@@ -151,9 +151,8 @@ function buildOperationContextFromArgs(
 }
 
 function executeImpl(args: ExecutionArgs): PromiseOrValue<ExecutionResult> {
-  if (args.schema.getDirective('defer') || args.schema.getDirective('stream')) {
-    throw new Error(UNEXPECTED_EXPERIMENTAL_DIRECTIVES);
-  }
+  console.log('executeImpl - document:', args.document);
+  console.log('executeImpl - variableValues:', args.variableValues);
 
   const validatedExecutionArgs = validateExecutionArgs(args);
 

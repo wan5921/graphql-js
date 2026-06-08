@@ -1,0 +1,66 @@
+diff --git a/src/execution/Executor.ts b/src/execution/Executor.ts
+index 88163c71..62c5f548 100644
+--- a/src/execution/Executor.ts
++++ b/src/execution/Executor.ts
+@@ -649,21 +649,6 @@ export class Executor<
+       // is provided to every resolve function within an execution. It is commonly
+       // used to represent an authenticated user, or request-specific caches.
+       const result = resolveFn(source, args, contextValue, info);
+-
+-      if (isPromiseLike(result)) {
+-        return this.completePromisedValue(
+-          returnType,
+-          fieldDetailsList,
+-          info,
+-          path,
+-          result,
+-          positionContext,
+-        );
+-      }
+-
+-      const completed = this.completeValue(
+-        returnType,
+-        fieldDetailsList,
+         info,
+         path,
+         result,
+@@ -725,6 +710,10 @@ export class Executor<
+       pathToArray(path),
+     );
+ 
++    if (!(rawError instanceof GraphQLError)) {
++      console.error('Resolver threw non-GraphQLError:', (rawError as Error)?.stack ?? rawError);
++    }
++
+     // If the field type is non-nullable, then it is resolved without any
+     // protection from errors, however it still properly locates the error.
+     if (
+diff --git a/src/execution/execute.ts b/src/execution/execute.ts
+index 1f0de814..52184013 100644
+--- a/src/execution/execute.ts
++++ b/src/execution/execute.ts
+@@ -151,9 +151,8 @@ function buildOperationContextFromArgs(
+ }
+ 
+ function executeImpl(args: ExecutionArgs): PromiseOrValue<ExecutionResult> {
+-  if (args.schema.getDirective('defer') || args.schema.getDirective('stream')) {
+-    throw new Error(UNEXPECTED_EXPERIMENTAL_DIRECTIVES);
+-  }
++  console.log('executeImpl - document:', args.document);
++  console.log('executeImpl - variableValues:', args.variableValues);
+ 
+   const validatedExecutionArgs = validateExecutionArgs(args);
+ 
+diff --git a/src/execution/values.ts b/src/execution/values.ts
+index 3ea37359..7214cd4c 100644
+--- a/src/execution/values.ts
++++ b/src/execution/values.ts
+@@ -176,6 +176,8 @@ export function getVariableValues(
+       options?.hideSuggestions,
+     );
+ 
++    console.log('getVariableValues - coercedValues:', variableValues.coerced);
++
+     if (errors.length === 0) {
+       return { variableValues };
+     }

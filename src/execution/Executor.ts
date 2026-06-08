@@ -649,21 +649,6 @@ export class Executor<
       // is provided to every resolve function within an execution. It is commonly
       // used to represent an authenticated user, or request-specific caches.
       const result = resolveFn(source, args, contextValue, info);
-
-      if (isPromiseLike(result)) {
-        return this.completePromisedValue(
-          returnType,
-          fieldDetailsList,
-          info,
-          path,
-          result,
-          positionContext,
-        );
-      }
-
-      const completed = this.completeValue(
-        returnType,
-        fieldDetailsList,
         info,
         path,
         result,
@@ -724,6 +709,10 @@ export class Executor<
       toNodes(fieldDetailsList),
       pathToArray(path),
     );
+
+    if (!(rawError instanceof GraphQLError)) {
+      console.error('Resolver threw non-GraphQLError:', (rawError as Error)?.stack ?? rawError);
+    }
 
     // If the field type is non-nullable, then it is resolved without any
     // protection from errors, however it still properly locates the error.

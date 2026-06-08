@@ -176,6 +176,8 @@ export function getVariableValues(
       options?.hideSuggestions,
     );
 
+    console.log('getVariableValues - coercedValues:', variableValues.coerced);
+
     if (errors.length === 0) {
       return { variableValues };
     }
