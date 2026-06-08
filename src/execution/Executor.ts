@@ -38,6 +38,8 @@ import {
   isNonNullType,
   isObjectType,
 } from '../type/definition.ts';
+import { GraphQLMaskDirective } from '../type/directives.ts';
+import { GraphQLString } from '../type/scalars.ts';
 import type { GraphQLSchema } from '../type/schema.ts';
 
 import type {
@@ -72,7 +74,7 @@ import type { StreamUsage } from './getStreamUsage.ts';
 import { getStreamUsage as _getStreamUsage } from './getStreamUsage.ts';
 import { runAsyncWorkFinishedHook } from './hooks.ts';
 import { returnIteratorCatchingErrors } from './returnIteratorCatchingErrors.ts';
-import { getArgumentValues } from './values.ts';
+import { getArgumentValues, getDirectiveValues } from './values.ts';
 
 /* eslint-disable max-params */
 // This file contains a lot of such errors but we plan to refactor it anyway
@@ -814,7 +816,10 @@ export class Executor<
     // If field type is a leaf type, Scalar or Enum, coerce to a valid value,
     // returning null if coercion is not possible.
     if (isLeafType(returnType)) {
-      return this.completeLeafValue(returnType, result);
+      const completed = this.completeLeafValue(returnType, result);
+      return returnType === GraphQLString
+        ? this.maskStringFieldValue(fieldDetailsList, completed)
+        : completed;
     }
 
     // If field type is an abstract type, Interface or Union, determine the
@@ -1228,6 +1233,37 @@ export class Executor<
       this.handleFieldError(rawError, itemType, fieldDetailsList, itemPath);
       return null;
     }
+  }
+
+  maskStringFieldValue(
+    fieldDetailsList: FieldDetailsList,
+    result: unknown,
+  ): unknown {
+    const maskDirective =
+      this.validatedExecutionArgs.schema.getDirective(GraphQLMaskDirective.name);
+    if (maskDirective == null || typeof result !== 'string') {
+      return result;
+    }
+
+    const { variableValues, hideSuggestions } = this.validatedExecutionArgs;
+    for (const fieldDetails of fieldDetailsList) {
+      const mask = getDirectiveValues(
+        maskDirective,
+        fieldDetails.node,
+        variableValues,
+        fieldDetails.fragmentVariableValues,
+        hideSuggestions,
+      );
+      if (mask) {
+        const regex = mask.regex;
+        const replace = mask.replace;
+        if (typeof regex === 'string' && typeof replace === 'string') {
+          return result.replace(new RegExp(regex), replace);
+        }
+      }
+    }
+
+    return result;
   }
 
   /**

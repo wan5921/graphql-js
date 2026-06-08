@@ -1,0 +1,192 @@
+diff --git a/src/execution/Executor.ts b/src/execution/Executor.ts
+index 88163c71..457a201d 100644
+--- a/src/execution/Executor.ts
++++ b/src/execution/Executor.ts
+@@ -38,6 +38,8 @@ import {
+   isNonNullType,
+   isObjectType,
+ } from '../type/definition.ts';
++import { GraphQLMaskDirective } from '../type/directives.ts';
++import { GraphQLString } from '../type/scalars.ts';
+ import type { GraphQLSchema } from '../type/schema.ts';
+ 
+ import type {
+@@ -72,7 +74,7 @@ import type { StreamUsage } from './getStreamUsage.ts';
+ import { getStreamUsage as _getStreamUsage } from './getStreamUsage.ts';
+ import { runAsyncWorkFinishedHook } from './hooks.ts';
+ import { returnIteratorCatchingErrors } from './returnIteratorCatchingErrors.ts';
+-import { getArgumentValues } from './values.ts';
++import { getArgumentValues, getDirectiveValues } from './values.ts';
+ 
+ /* eslint-disable max-params */
+ // This file contains a lot of such errors but we plan to refactor it anyway
+@@ -814,7 +816,10 @@ export class Executor<
+     // If field type is a leaf type, Scalar or Enum, coerce to a valid value,
+     // returning null if coercion is not possible.
+     if (isLeafType(returnType)) {
+-      return this.completeLeafValue(returnType, result);
++      const completed = this.completeLeafValue(returnType, result);
++      return returnType === GraphQLString
++        ? this.maskStringFieldValue(fieldDetailsList, completed)
++        : completed;
+     }
+ 
+     // If field type is an abstract type, Interface or Union, determine the
+@@ -1230,6 +1235,37 @@ export class Executor<
+     }
+   }
+ 
++  maskStringFieldValue(
++    fieldDetailsList: FieldDetailsList,
++    result: unknown,
++  ): unknown {
++    const maskDirective =
++      this.validatedExecutionArgs.schema.getDirective(GraphQLMaskDirective.name);
++    if (maskDirective == null || typeof result !== 'string') {
++      return result;
++    }
++
++    const { variableValues, hideSuggestions } = this.validatedExecutionArgs;
++    for (const fieldDetails of fieldDetailsList) {
++      const mask = getDirectiveValues(
++        maskDirective,
++        fieldDetails.node,
++        variableValues,
++        fieldDetails.fragmentVariableValues,
++        hideSuggestions,
++      );
++      if (mask) {
++        const regex = mask.regex;
++        const replace = mask.replace;
++        if (typeof regex === 'string' && typeof replace === 'string') {
++          return result.replace(new RegExp(regex), replace);
++        }
++      }
++    }
++
++    return result;
++  }
++
+   /**
+    * Complete a Scalar or Enum by serializing to a valid value, returning
+    * null if serialization is not possible.
+diff --git a/src/execution/__tests__/directives-test.ts b/src/execution/__tests__/directives-test.ts
+index 4a43d335..cf980c1e 100644
+--- a/src/execution/__tests__/directives-test.ts
++++ b/src/execution/__tests__/directives-test.ts
+@@ -8,6 +8,8 @@ import { GraphQLObjectType } from '../../type/definition.ts';
+ import { GraphQLString } from '../../type/scalars.ts';
+ import { GraphQLSchema } from '../../type/schema.ts';
+ 
++import { buildSchema } from '../../utilities/buildASTSchema.ts';
++
+ import { executeSync } from '../execute.ts';
+ 
+ const schema = new GraphQLSchema({
+@@ -309,4 +311,54 @@ describe('Execute: handles directives', () => {
+       });
+     });
+   });
++
++  describe('works with mask directive', () => {
++    it('masks string field when directive is defined with buildSchema', () => {
++      const schema = buildSchema(`
++        directive @mask(regex: String!, replace: String!) on FIELD
++
++        type Query {
++          phone: String
++        }
++      `);
++      const document = parse(`
++        {
++          phone @mask(regex: "\\d{4}$", replace: "****")
++        }
++      `);
++
++      const result = executeSync({
++        schema,
++        document,
++        rootValue: { phone: '13800001234' },
++      });
++
++      expect(result).to.deep.equal({
++        data: { phone: '1380000****' },
++      });
++    });
++
++    it('does not mask string field when directive is not defined', () => {
++      const schema = buildSchema(`
++        type Query {
++          phone: String
++        }
++      `);
++      const document = parse(`
++        {
++          phone @mask(regex: "\\d{4}$", replace: "****")
++        }
++      `);
++
++      const result = executeSync({
++        schema,
++        document,
++        rootValue: { phone: '13800001234' },
++      });
++
++      expect(result).to.deep.equal({
++        data: { phone: '13800001234' },
++      });
++    });
++  });
+ });
+diff --git a/src/index.ts b/src/index.ts
+index 219478ad..3007c76a 100644
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -90,6 +90,7 @@ export {
+   specifiedDirectives,
+   GraphQLIncludeDirective,
+   GraphQLSkipDirective,
++  GraphQLMaskDirective,
+   GraphQLDeferDirective,
+   GraphQLStreamDirective,
+   GraphQLDeprecatedDirective,
+diff --git a/src/type/directives.ts b/src/type/directives.ts
+index 895a3c8b..c50d1eb0 100644
+--- a/src/type/directives.ts
++++ b/src/type/directives.ts
+@@ -352,6 +352,23 @@ export const GraphQLSkipDirective: GraphQLDirective = new GraphQLDirective({
+   },
+ });
+ 
++export const GraphQLMaskDirective: GraphQLDirective = new GraphQLDirective({
++  name: 'mask',
++  description:
++    'Directs the executor to replace parts of this string field using the provided regular expression.',
++  locations: [DirectiveLocation.FIELD],
++  args: {
++    regex: {
++      type: new GraphQLNonNull(GraphQLString),
++      description: 'Regular expression pattern used for replacement.',
++    },
++    replace: {
++      type: new GraphQLNonNull(GraphQLString),
++      description: 'Replacement string applied to every match.',
++    },
++  },
++});
++
+ /**
+  * Experimental directive used to conditionally defer fragments.
+  *
+diff --git a/src/type/index.ts b/src/type/index.ts
+index 0f7f6206..cc8675bd 100644
+--- a/src/type/index.ts
++++ b/src/type/index.ts
+@@ -155,6 +155,7 @@ export {
+   specifiedDirectives,
+   GraphQLIncludeDirective,
+   GraphQLSkipDirective,
++  GraphQLMaskDirective,
+   GraphQLDeferDirective,
+   GraphQLStreamDirective,
+   GraphQLDeprecatedDirective,

@@ -155,6 +155,7 @@ export {
   specifiedDirectives,
   GraphQLIncludeDirective,
   GraphQLSkipDirective,
+  GraphQLMaskDirective,
   GraphQLDeferDirective,
   GraphQLStreamDirective,
   GraphQLDeprecatedDirective,

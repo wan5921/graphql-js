@@ -352,6 +352,23 @@ export const GraphQLSkipDirective: GraphQLDirective = new GraphQLDirective({
   },
 });
 
+export const GraphQLMaskDirective: GraphQLDirective = new GraphQLDirective({
+  name: 'mask',
+  description:
+    'Directs the executor to replace parts of this string field using the provided regular expression.',
+  locations: [DirectiveLocation.FIELD],
+  args: {
+    regex: {
+      type: new GraphQLNonNull(GraphQLString),
+      description: 'Regular expression pattern used for replacement.',
+    },
+    replace: {
+      type: new GraphQLNonNull(GraphQLString),
+      description: 'Replacement string applied to every match.',
+    },
+  },
+});
+
 /**
  * Experimental directive used to conditionally defer fragments.
  *
