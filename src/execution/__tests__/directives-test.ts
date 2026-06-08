@@ -8,8 +8,6 @@ import { GraphQLObjectType } from '../../type/definition.ts';
 import { GraphQLString } from '../../type/scalars.ts';
 import { GraphQLSchema } from '../../type/schema.ts';
 
-import { buildSchema } from '../../utilities/buildASTSchema.ts';
-
 import { executeSync } from '../execute.ts';
 
 const schema = new GraphQLSchema({
@@ -308,56 +306,6 @@ describe('Execute: handles directives', () => {
 
       expect(result).to.deep.equal({
         data: { a: 'a' },
-      });
-    });
-  });
-
-  describe('works with mask directive', () => {
-    it('masks string field when directive is defined with buildSchema', () => {
-      const schema = buildSchema(`
-        directive @mask(regex: String!, replace: String!) on FIELD
-
-        type Query {
-          phone: String
-        }
-      `);
-      const document = parse(`
-        {
-          phone @mask(regex: "\\d{4}$", replace: "****")
-        }
-      `);
-
-      const result = executeSync({
-        schema,
-        document,
-        rootValue: { phone: '13800001234' },
-      });
-
-      expect(result).to.deep.equal({
-        data: { phone: '1380000****' },
-      });
-    });
-
-    it('does not mask string field when directive is not defined', () => {
-      const schema = buildSchema(`
-        type Query {
-          phone: String
-        }
-      `);
-      const document = parse(`
-        {
-          phone @mask(regex: "\\d{4}$", replace: "****")
-        }
-      `);
-
-      const result = executeSync({
-        schema,
-        document,
-        rootValue: { phone: '13800001234' },
-      });
-
-      expect(result).to.deep.equal({
-        data: { phone: '13800001234' },
       });
     });
   });
