@@ -50,6 +50,7 @@
     "check:integrations": "npm run node:test -- \"resources/integration-test.ts\"",
     "build:npm": "node --experimental-strip-types resources/build-npm.ts",
     "build:deno": "node --experimental-strip-types resources/build-deno.ts",
+    "build": "npm run build:npm && npm run build:deno",
     "diff:npm": "node --experimental-strip-types resources/diff-npm-package.ts",
     "prepare": "husky"
   },
