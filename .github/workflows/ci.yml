@@ -163,21 +163,8 @@ jobs:
       - name: Install Dependencies
         run: npm ci --ignore-scripts
 
-      - name: Run Tests with coverage report
-        if: matrix.node_version_to_setup == 22
-        run: npm run coverage
-
       - name: Run Tests with coverage
-        if: matrix.node_version_to_setup != 22
         run: npm run testonly:cover
-
-      - name: Upload coverage to Codecov
-        if: matrix.node_version_to_setup == 22
-        uses: codecov/codecov-action@v5
-        with:
-          files: ./coverage/lcov.info
-          token: ${{ secrets.CODECOV_TOKEN }}
-          fail_ci_if_error: false
 
   codeql:
     name: Run CodeQL security scan
