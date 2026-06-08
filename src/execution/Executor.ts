@@ -648,7 +648,22 @@ export class Executor<
       // The resolve function's optional third argument is a context value that
       // is provided to every resolve function within an execution. It is commonly
       // used to represent an authenticated user, or request-specific caches.
-      const result = resolveFn(source, args, contextValue, info);
+      let result;
+      try {
+        result = resolveFn(source, args, contextValue, info);
+      } catch (rawError) {
+        if (!(rawError instanceof GraphQLError)) {
+          console.error('Resolver threw non-GraphQLError:', rawError);
+          console.error('Stack trace:', (rawError as Error).stack);
+          rawError = locatedError(
+            rawError,
+            toNodes(fieldDetailsList),
+            pathToArray(path),
+          );
+        }
+        this.handleFieldError(rawError, returnType, fieldDetailsList, path);
+        return null;
+      }
 
       if (isPromiseLike(result)) {
         return this.completePromisedValue(
