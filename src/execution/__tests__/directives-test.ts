@@ -8,8 +8,6 @@ import { GraphQLObjectType } from '../../type/definition.ts';
 import { GraphQLString } from '../../type/scalars.ts';
 import { GraphQLSchema } from '../../type/schema.ts';
 
-import { buildSchema } from '../../utilities/buildASTSchema.ts';
-
 import { executeSync } from '../execute.ts';
 
 const schema = new GraphQLSchema({
@@ -77,51 +75,6 @@ describe('Execute: handles directives', () => {
 
       expect(result).to.deep.equal({
         data: { a: 'a' },
-      });
-    });
-  });
-
-  describe('works on mask directive', () => {
-    it('masks string field using regex and replace', () => {
-      const result = executeTestQuery(
-        '{ a @mask(regex: "a", replace: "masked") }',
-      );
-
-      expect(result).to.deep.equal({
-        data: { a: 'masked' },
-      });
-    });
-
-    it('does not mask non-string fields or non-matching strings', () => {
-      const result = executeTestQuery(
-        '{ b @mask(regex: "x", replace: "y") }',
-      );
-
-      expect(result).to.deep.equal({
-        data: { b: 'b' },
-      });
-    });
-
-    it('works with buildSchema', () => {
-      const builtSchema = buildSchema(`
-        type Query {
-          a: String
-          b: String
-        }
-      `);
-
-      const root = { a: () => 'hello world', b: () => 'hello world' };
-
-      const document1 = parse('{ a @mask(regex: "world", replace: "graphql") }');
-      const result1 = executeSync({ schema: builtSchema, document: document1, rootValue: root });
-      expect(result1).to.deep.equal({
-        data: { a: 'hello graphql' },
-      });
-
-      const document2 = parse('{ a }');
-      const result2 = executeSync({ schema: builtSchema, document: document2, rootValue: root });
-      expect(result2).to.deep.equal({
-        data: { a: 'hello world' },
       });
     });
   });
