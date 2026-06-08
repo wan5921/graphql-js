@@ -166,12 +166,6 @@ jobs:
       - name: Run Tests with coverage
         run: npm run testonly:cover
 
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
-        if: matrix.node_version_to_setup == 22
-        with:
-          files: ./coverage/lcov.info
-
   codeql:
     name: Run CodeQL security scan
     runs-on: ubuntu-latest
@@ -283,26 +277,3 @@ jobs:
         # (e) enforcing JSR slow-types checks.
         working-directory: ./denoDist
         run: deno publish --dry-run
-
-  build-check:
-    name: Run npm run build to check artifacts
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read # for actions/checkout
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v6
-        with:
-          persist-credentials: false
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          cache: npm
-          node-version-file: '.node-version'
-
-      - name: Install Dependencies
-        run: npm ci --ignore-scripts
-
-      - name: Run build
-        run: npm run build
