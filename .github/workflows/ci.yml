@@ -165,14 +165,6 @@ jobs:
 
       - name: Run Tests with coverage
         run: npm run testonly:cover
-        env:
-          NODE_V8_COVERAGE: coverage
-
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
-        with:
-          directory: coverage
-          fail_ci_if_error: false
 
   codeql:
     name: Run CodeQL security scan
@@ -193,32 +185,6 @@ jobs:
 
       - name: Perform CodeQL analysis
         uses: github/codeql-action/analyze@v4
-
-  build:
-    name: Verify build artifacts
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read # for actions/checkout
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v6
-        with:
-          persist-credentials: false
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          cache: npm
-          node-version-file: '.node-version'
-
-      - name: Install Dependencies
-        run: npm ci --ignore-scripts
-
-      - name: Build
-        run: npm run build
-
-      - name: Verify build output exists
-        run: test -d npmDist -a -f npmDist/package.json
 
   build-npm-dist:
     name: Build 'npmDist' artifact
