@@ -160,6 +160,7 @@ export {
   GraphQLDeprecatedDirective,
   GraphQLSpecifiedByDirective,
   GraphQLOneOfDirective,
+  GraphQLMaskDirective,
   // Constant Deprecation Reason
   DEFAULT_DEPRECATION_REASON,
 } from './directives.ts';

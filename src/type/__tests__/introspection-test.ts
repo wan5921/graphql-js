@@ -1904,6 +1904,11 @@ describe('Introspection', () => {
               isDeprecated: false,
               deprecationReason: null,
             },
+            {
+              name: 'mask',
+              isDeprecated: false,
+              deprecationReason: null,
+            },
           ],
         },
       },
@@ -1951,6 +1956,7 @@ describe('Introspection', () => {
             { name: 'deprecated' },
             { name: 'specifiedBy' },
             { name: 'oneOf' },
+            { name: 'mask' },
           ],
           falseDirectives: [
             { name: 'isNotDeprecated' },
@@ -1959,6 +1965,7 @@ describe('Introspection', () => {
             { name: 'deprecated' },
             { name: 'specifiedBy' },
             { name: 'oneOf' },
+            { name: 'mask' },
           ],
           omittedDirectives: [
             { name: 'isNotDeprecated' },
@@ -1967,6 +1974,7 @@ describe('Introspection', () => {
             { name: 'deprecated' },
             { name: 'specifiedBy' },
             { name: 'oneOf' },
+            { name: 'mask' },
           ],
         },
       },

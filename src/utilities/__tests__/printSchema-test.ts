@@ -837,6 +837,17 @@ describe('Type System Printer', () => {
       directive @oneOf on INPUT_OBJECT
 
       """
+      Directs the executor to apply a regex replacement to the string value of this field.
+      """
+      directive @mask(
+        """The regular expression pattern to match."""
+        regex: String!
+
+        """The replacement string."""
+        replace: String!
+      ) on FIELD
+
+      """
       A GraphQL Schema defines the capabilities of a GraphQL server. It exposes all available types and directives on the server, as well as the entry points for query, mutation, and subscription operations.
       """
       type __Schema {
