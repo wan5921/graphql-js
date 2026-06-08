@@ -1,0 +1,71 @@
+diff --git a/src/execution/Executor.ts b/src/execution/Executor.ts
+index 88163c71..1a554221 100644
+--- a/src/execution/Executor.ts
++++ b/src/execution/Executor.ts
+@@ -648,9 +648,33 @@ export class Executor<
+       // The resolve function's optional third argument is a context value that
+       // is provided to every resolve function within an execution. It is commonly
+       // used to represent an authenticated user, or request-specific caches.
+-      const result = resolveFn(source, args, contextValue, info);
++      let result;
++      try {
++        result = resolveFn(source, args, contextValue, info);
++      } catch (rawError) {
++        if (!(rawError instanceof GraphQLError)) {
++          console.error('Resolver threw a non-GraphQLError:', rawError);
++          if (rawError instanceof Error && rawError.stack) {
++            console.error('Stack trace:', rawError.stack);
++          }
++          const originalError = rawError instanceof Error ? rawError : new Error(String(rawError));
++          rawError = new GraphQLError(originalError.message, { originalError });
++        }
++        throw rawError;
++      }
+ 
+       if (isPromiseLike(result)) {
++        result = result.then(undefined, (rawError: unknown) => {
++          if (!(rawError instanceof GraphQLError)) {
++            console.error('Resolver rejected with a non-GraphQLError:', rawError);
++            if (rawError instanceof Error && rawError.stack) {
++              console.error('Stack trace:', rawError.stack);
++            }
++            const originalError = rawError instanceof Error ? rawError : new Error(String(rawError));
++            rawError = new GraphQLError(originalError.message, { originalError });
++          }
++          throw rawError;
++        });
+         return this.completePromisedValue(
+           returnType,
+           fieldDetailsList,
+diff --git a/src/execution/execute.ts b/src/execution/execute.ts
+index 1f0de814..4b0005d4 100644
+--- a/src/execution/execute.ts
++++ b/src/execution/execute.ts
+@@ -151,6 +151,8 @@ function buildOperationContextFromArgs(
+ }
+ 
+ function executeImpl(args: ExecutionArgs): PromiseOrValue<ExecutionResult> {
++  console.log('executeOperation entry: document:', args.document, 'variableValues:', args.variableValues);
++
+   if (args.schema.getDirective('defer') || args.schema.getDirective('stream')) {
+     throw new Error(UNEXPECTED_EXPERIMENTAL_DIRECTIVES);
+   }
+diff --git a/src/execution/values.ts b/src/execution/values.ts
+index 3ea37359..ef354e37 100644
+--- a/src/execution/values.ts
++++ b/src/execution/values.ts
+@@ -178,9 +178,13 @@ export function getVariableValues(
+ 
+     if (errors.length === 0) {
+       return { variableValues };
++    } else {
++      console.error('getVariableValues failed due to type mismatch or other errors:', errors);
+     }
+   } catch (error) {
+-    errors.push(ensureGraphQLError(error));
++    const gqlError = ensureGraphQLError(error);
++    console.error('getVariableValues caught exception:', gqlError);
++    errors.push(gqlError);
+   }
+ 
+   return { errors };

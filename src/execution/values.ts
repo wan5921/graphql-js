@@ -178,9 +178,13 @@ export function getVariableValues(
 
     if (errors.length === 0) {
       return { variableValues };
+    } else {
+      console.error('getVariableValues failed due to type mismatch or other errors:', errors);
     }
   } catch (error) {
-    errors.push(ensureGraphQLError(error));
+    const gqlError = ensureGraphQLError(error);
+    console.error('getVariableValues caught exception:', gqlError);
+    errors.push(gqlError);
   }
 
   return { errors };
