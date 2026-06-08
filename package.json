@@ -51,6 +51,7 @@
     "build:npm": "node --experimental-strip-types resources/build-npm.ts",
     "build:deno": "node --experimental-strip-types resources/build-deno.ts",
     "diff:npm": "node --experimental-strip-types resources/diff-npm-package.ts",
+    "build": "npm run build:npm",
     "prepare": "husky"
   },
   "devDependencies": {
