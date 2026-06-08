@@ -605,3 +605,24 @@ export type {
   TypedQueryDocumentNode,
   ResolvedSchemaElement,
 } from './utilities/index.ts';
+
+// Type configuration and presets
+export {
+  FieldPreset,
+  PresetOptions,
+  paginationPreset,
+  timestampPreset,
+  idPreset,
+  mergeFieldConfigs,
+  applyPreset,
+} from './types/fieldPresets.ts';
+export {
+  TypeConfig,
+  createTypeConfig,
+  buildTypeFromConfig,
+  buildTypesFromConfigs,
+} from './types/typeConfig.ts';
+export {
+  TypeRegistry,
+  globalTypeRegistry,
+} from './types/typeRegistry.ts';
