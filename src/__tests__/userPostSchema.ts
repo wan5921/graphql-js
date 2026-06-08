@@ -1,0 +1,144 @@
+import {
+  GraphQLList,
+  GraphQLNonNull,
+  GraphQLObjectType,
+} from '../type/definition.ts';
+import { GraphQLString, GraphQLInt } from '../type/scalars.ts';
+import { GraphQLSchema } from '../type/schema.ts';
+
+export interface User {
+  id: number;
+  name: string;
+}
+
+export interface Post {
+  id: number;
+  title: string;
+  userId: number;
+}
+
+const users: Map<number, User> = new Map();
+const posts: Map<number, Post> = new Map();
+let nextUserId = 1;
+let nextPostId = 1;
+
+export function getUser(id: number): User | undefined {
+  return users.get(id);
+}
+
+export function getAllPosts(): Post[] {
+  return Array.from(posts.values());
+}
+
+export function addUser(name: string): User {
+  const user: User = {
+    id: nextUserId++,
+    name,
+  };
+  users.set(user.id, user);
+  return user;
+}
+
+export function addPost(title: string, userId: number): Post | undefined {
+  if (!users.has(userId)) {
+    return undefined;
+  }
+  const post: Post = {
+    id: nextPostId++,
+    title,
+    userId,
+  };
+  posts.set(post.id, post);
+  return post;
+}
+
+const userType = new GraphQLObjectType({
+  name: 'User',
+  description: 'A user of the blog platform.',
+  fields: () => ({
+    id: {
+      type: new GraphQLNonNull(GraphQLInt),
+      description: 'The unique identifier of the user.',
+    },
+    name: {
+      type: GraphQLString,
+      description: 'The name of the user.',
+    },
+  }),
+});
+
+const postType = new GraphQLObjectType({
+  name: 'Post',
+  description: 'A blog post created by a user.',
+  fields: () => ({
+    id: {
+      type: new GraphQLNonNull(GraphQLInt),
+      description: 'The unique identifier of the post.',
+    },
+    title: {
+      type: GraphQLString,
+      description: 'The title of the post.',
+    },
+    userId: {
+      type: new GraphQLNonNull(GraphQLInt),
+      description: 'The ID of the user who created this post.',
+    },
+  }),
+});
+
+const queryType = new GraphQLObjectType({
+  name: 'Query',
+  fields: () => ({
+    user: {
+      type: userType,
+      args: {
+        id: {
+          description: 'id of the user',
+          type: new GraphQLNonNull(GraphQLInt),
+        },
+      },
+      resolve: (_source, { id }) => getUser(id),
+    },
+    posts: {
+      type: new GraphQLList(postType),
+      description: 'Returns all posts in the blog.',
+      resolve: () => getAllPosts(),
+    },
+  }),
+});
+
+const mutationType = new GraphQLObjectType({
+  name: 'Mutation',
+  fields: () => ({
+    addUser: {
+      type: userType,
+      args: {
+        name: {
+          description: 'The name of the new user.',
+          type: new GraphQLNonNull(GraphQLString),
+        },
+      },
+      resolve: (_source, { name }) => addUser(name),
+    },
+    addPost: {
+      type: postType,
+      args: {
+        title: {
+          description: 'The title of the new post.',
+          type: new GraphQLNonNull(GraphQLString),
+        },
+        userId: {
+          description: 'The ID of the user creating this post.',
+          type: new GraphQLNonNull(GraphQLInt),
+        },
+      },
+      resolve: (_source, { title, userId }) => addPost(title, userId),
+    },
+  }),
+});
+
+export const userPostSchema: GraphQLSchema = new GraphQLSchema({
+  query: queryType,
+  mutation: mutationType,
+  types: [userType, postType],
+});
