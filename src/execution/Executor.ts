@@ -680,12 +680,6 @@ export class Executor<
       }
       return completed;
     } catch (rawError) {
-      if (!(rawError instanceof GraphQLError)) {
-        console.error(
-          `Resolver threw non-GraphQLError for field "${info.parentType}.${info.fieldName}":`,
-          rawError instanceof Error ? rawError.stack : rawError,
-        );
-      }
       this.handleFieldError(rawError, returnType, fieldDetailsList, path);
       return null;
     }
@@ -882,12 +876,6 @@ export class Executor<
       }
       return completed;
     } catch (rawError) {
-      if (!(rawError instanceof GraphQLError)) {
-        console.error(
-          `Async resolver threw non-GraphQLError for field "${info.parentType}.${info.fieldName}":`,
-          rawError instanceof Error ? rawError.stack : rawError,
-        );
-      }
       this.handleFieldError(rawError, returnType, fieldDetailsList, path);
       return null;
     }
