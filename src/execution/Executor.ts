@@ -38,6 +38,7 @@ import {
   isNonNullType,
   isObjectType,
 } from '../type/definition.ts';
+import { GraphQLMaskDirective } from '../type/directives.ts';
 import type { GraphQLSchema } from '../type/schema.ts';
 
 import type {
@@ -72,7 +73,7 @@ import type { StreamUsage } from './getStreamUsage.ts';
 import { getStreamUsage as _getStreamUsage } from './getStreamUsage.ts';
 import { runAsyncWorkFinishedHook } from './hooks.ts';
 import { returnIteratorCatchingErrors } from './returnIteratorCatchingErrors.ts';
-import { getArgumentValues } from './values.ts';
+import { getArgumentValues, getDirectiveValues } from './values.ts';
 
 /* eslint-disable max-params */
 // This file contains a lot of such errors but we plan to refactor it anyway
@@ -814,7 +815,7 @@ export class Executor<
     // If field type is a leaf type, Scalar or Enum, coerce to a valid value,
     // returning null if coercion is not possible.
     if (isLeafType(returnType)) {
-      return this.completeLeafValue(returnType, result);
+      return this.completeLeafValue(returnType, fieldDetailsList, result);
     }
 
     // If field type is an abstract type, Interface or Union, determine the
@@ -1236,7 +1237,11 @@ export class Executor<
    *
    * @internal
    */
-  completeLeafValue(returnType: GraphQLLeafType, result: unknown): unknown {
+  completeLeafValue(
+    returnType: GraphQLLeafType,
+    fieldDetailsList: FieldDetailsList,
+    result: unknown,
+  ): unknown {
     const coerced = returnType.coerceOutputValue(result);
     if (coerced == null) {
       throw new Error(
@@ -1244,6 +1249,20 @@ export class Executor<
           `return non-nullable value, returned: ${inspect(coerced)}`,
       );
     }
+
+    const maskDirective = getDirectiveValues(
+      GraphQLMaskDirective,
+      { directives: fieldDetailsList[0].node.directives },
+      this.validatedExecutionArgs.variableValues,
+      fieldDetailsList[0].fragmentVariableValues,
+      this.validatedExecutionArgs.hideSuggestions,
+    );
+
+    if (maskDirective && typeof coerced === 'string') {
+      const regex = new RegExp(maskDirective.regex as string, 'g');
+      return coerced.replace(regex, maskDirective.replace as string);
+    }
+
     return coerced;
   }
 

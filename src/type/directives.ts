@@ -408,6 +408,24 @@ export const GraphQLStreamDirective: GraphQLDirective = new GraphQLDirective({
   },
 });
 
+/** Used to apply regex replacement to string field values. */
+export const GraphQLMaskDirective: GraphQLDirective = new GraphQLDirective({
+  name: 'mask',
+  description:
+    'Directs the executor to apply regex replacement to string field values.',
+  locations: [DirectiveLocation.FIELD],
+  args: {
+    regex: {
+      type: new GraphQLNonNull(GraphQLString),
+      description: 'The regex pattern to match.',
+    },
+    replace: {
+      type: new GraphQLNonNull(GraphQLString),
+      description: 'The replacement string.',
+    },
+  },
+});
+
 /** Constant string used for default reason for a deprecation. */
 export const DEFAULT_DEPRECATION_REASON = 'No longer supported';
 
