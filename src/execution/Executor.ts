@@ -18,8 +18,6 @@ import { ensureGraphQLError } from '../error/ensureGraphQLError.ts';
 import type { GraphQLFormattedError } from '../error/GraphQLError.ts';
 import { GraphQLError } from '../error/GraphQLError.ts';
 import { locatedError } from '../error/locatedError.ts';
-import { GraphQLMaskDirective } from '../type/directives.ts';
-import { getArgumentValues } from './values.ts';
 
 import type { FieldNode } from '../language/ast.ts';
 import { OperationTypeNode } from '../language/ast.ts';
@@ -816,12 +814,7 @@ export class Executor<
     // If field type is a leaf type, Scalar or Enum, coerce to a valid value,
     // returning null if coercion is not possible.
     if (isLeafType(returnType)) {
-      return this.completeLeafValue(
-        returnType,
-        result,
-        fieldDetailsList,
-        info,
-      );
+      return this.completeLeafValue(returnType, result);
     }
 
     // If field type is an abstract type, Interface or Union, determine the
@@ -1243,47 +1236,13 @@ export class Executor<
    *
    * @internal
    */
-  completeLeafValue(
-    returnType: GraphQLLeafType,
-    result: unknown,
-    fieldDetailsList: FieldDetailsList,
-    info: GraphQLResolveInfo,
-  ): unknown {
+  completeLeafValue(returnType: GraphQLLeafType, result: unknown): unknown {
     const coerced = returnType.coerceOutputValue(result);
     if (coerced == null) {
       throw new Error(
         `Expected \`${inspect(returnType)}.coerceOutputValue(${inspect(result)})\` to ` +
           `return non-nullable value, returned: ${inspect(coerced)}`,
       );
-    }
-
-    // Apply @mask directive if it's a string
-    if (typeof coerced === 'string') {
-      const { variableValues } = this.validatedExecutionArgs;
-      for (const fieldDetail of fieldDetailsList) {
-        const node = fieldDetail.node;
-        const maskDirectiveNode = node.directives?.find(
-          (directive) => directive.name.value === GraphQLMaskDirective.name,
-        );
-        if (maskDirectiveNode) {
-          const maskArgs = getArgumentValues(
-            GraphQLMaskDirective,
-            maskDirectiveNode,
-            variableValues,
-            fieldDetail.fragmentVariableValues,
-            this.validatedExecutionArgs.hideSuggestions,
-          );
-          if (maskArgs) {
-            const { regex, replace } = maskArgs;
-            try {
-              return coerced.replace(new RegExp(regex), replace);
-            } catch {
-              // If regex is invalid, return original value
-              return coerced;
-            }
-          }
-        }
-      }
     }
     return coerced;
   }

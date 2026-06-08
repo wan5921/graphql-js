@@ -461,23 +461,6 @@ export const GraphQLOneOfDirective: GraphQLDirective = new GraphQLDirective({
   args: {},
 });
 
-export const GraphQLMaskDirective: GraphQLDirective = new GraphQLDirective({
-  name: 'mask',
-  description:
-    'Masks string field values using a regular expression and replacement string.',
-  locations: [DirectiveLocation.FIELD],
-  args: {
-    regex: {
-      type: new GraphQLNonNull(GraphQLString),
-      description: 'The regular expression pattern to match.',
-    },
-    replace: {
-      type: new GraphQLNonNull(GraphQLString),
-      description: 'The replacement string to use.',
-    },
-  },
-});
-
 /**
  * Disables error propagation (experimental).
  *
