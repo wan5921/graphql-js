@@ -113,9 +113,6 @@ export type RootSelectionSetExecutor = (
  * ```
  */
 export function execute(args: ExecutionArgs): PromiseOrValue<ExecutionResult> {
-  console.log('[DEBUG] execute() - document:', JSON.stringify(args.document, null, 2));
-  console.log('[DEBUG] execute() - variableValues:', args.variableValues);
-
   if (!shouldTrace(executeChannel)) {
     return executeImpl(args);
   }
