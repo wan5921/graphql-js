@@ -1,0 +1,72 @@
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index 4d1d82ca..ca273625 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -163,9 +163,22 @@ jobs:
+       - name: Install Dependencies
+         run: npm ci --ignore-scripts
+ 
++      - name: Run Tests with coverage report
++        if: matrix.node_version_to_setup == 22
++        run: npm run coverage
++
+       - name: Run Tests with coverage
++        if: matrix.node_version_to_setup != 22
+         run: npm run testonly:cover
+ 
++      - name: Upload coverage to Codecov
++        if: matrix.node_version_to_setup == 22
++        uses: codecov/codecov-action@v5
++        with:
++          files: ./coverage/lcov.info
++          token: ${{ secrets.CODECOV_TOKEN }}
++          fail_ci_if_error: false
++
+   codeql:
+     name: Run CodeQL security scan
+     runs-on: ubuntu-latest
+diff --git a/.github/workflows/push.yml b/.github/workflows/push.yml
+index c5768df8..15b6cbe8 100644
+--- a/.github/workflows/push.yml
++++ b/.github/workflows/push.yml
+@@ -1,5 +1,7 @@
+ name: Push
+-on: push
++on:
++  push:
++    branches: [main, 17.x.x]
+ permissions: {}
+ jobs:
+   ci:
+diff --git a/README.md b/README.md
+index 253f5e96..eaaf4cfc 100644
+--- a/README.md
++++ b/README.md
+@@ -6,6 +6,7 @@ The JavaScript reference implementation for GraphQL, a query language for APIs c
+ 
+ [![npm version](https://badge.fury.io/js/graphql.svg)](https://badge.fury.io/js/graphql)
+ [![Build Status](https://github.com/graphql/graphql-js/workflows/CI/badge.svg?branch=main)](https://github.com/graphql/graphql-js/actions?query=branch%3Amain)
++[![Coverage](https://codecov.io/gh/graphql/graphql-js/branch/main/graph/badge.svg)](https://codecov.io/gh/graphql/graphql-js)
+ 
+ See more complete documentation at https://graphql.org/ and
+ https://graphql.org/graphql-js/.
+diff --git a/package.json b/package.json
+index 3584e230..703d17ef 100644
+--- a/package.json
++++ b/package.json
+@@ -42,6 +42,7 @@
+     "check:deno": "npm run build:deno && deno publish --dry-run --allow-dirty --config denoDist/jsr.json",
+     "testonly": "npm run node:test -- \"src/**/__tests__/**/*-test.ts\"",
+     "testonly:cover": "npm run node:test -- --experimental-test-coverage --test-coverage-include=\"src/**/*.ts\" --test-coverage-exclude=\"src/**/__tests__/**\" --test-coverage-exclude=\"**/*-test.ts\" --test-coverage-lines=100 --test-coverage-branches=100 --test-coverage-functions=100 \"src/**/__tests__/**/*-test.ts\"",
++    "coverage": "c8 --reporter=lcov --reporter=text --check-coverage --lines=100 --branches=100 --functions=100 npm run testonly",
+     "testonly:watch": "npm run node:test -- --watch \"src/**/__tests__/**/*-test.ts\"",
+     "prettier": "prettier --cache --cache-strategy metadata --write --list-different .",
+     "prettier:check": "prettier --cache --cache-strategy metadata --check .",
+@@ -56,6 +57,7 @@
+   "devDependencies": {
+     "@types/chai": "5.2.3",
+     "@types/node": "25.3.0",
++    "c8": "10.1.3",
+     "chai": "6.2.2",
+     "cspell": "9.6.4",
+     "eslint": "9.39.3",
