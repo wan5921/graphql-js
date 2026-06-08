@@ -151,10 +151,13 @@ function buildOperationContextFromArgs(
 }
 
 function executeImpl(args: ExecutionArgs): PromiseOrValue<ExecutionResult> {
+<<<<<<< Updated upstream
   console.log('executeOperation entry: document:', args.document, 'variableValues:', args.variableValues);
 
   if (args.schema.getDirective('defer') || args.schema.getDirective('stream')) {
     throw new Error(UNEXPECTED_EXPERIMENTAL_DIRECTIVES);
+=======
+>>>>>>> Stashed changes
   }
 
   const validatedExecutionArgs = validateExecutionArgs(args);

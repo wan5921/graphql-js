@@ -648,6 +648,7 @@ export class Executor<
       // The resolve function's optional third argument is a context value that
       // is provided to every resolve function within an execution. It is commonly
       // used to represent an authenticated user, or request-specific caches.
+<<<<<<< Updated upstream
       let result;
       try {
         result = resolveFn(source, args, contextValue, info);
@@ -686,19 +687,11 @@ export class Executor<
       }
 
       const completed = this.completeValue(
+=======
+      const result = resolveFn(source, args, contextValue, info);
+>>>>>>> Stashed changes
         returnType,
         fieldDetailsList,
-        info,
-        path,
-        result,
-        positionContext,
-      );
-
-      if (isPromise(completed)) {
-        // Note: we don't rely on a `catch` method, but we do expect "thenable"
-        // to take a second callback for the error case.
-        return completed.then(undefined, (rawError: unknown) => {
-          this.handleFieldError(rawError, returnType, fieldDetailsList, path);
           return null;
         });
       }

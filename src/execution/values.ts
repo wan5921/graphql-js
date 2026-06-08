@@ -178,6 +178,7 @@ export function getVariableValues(
 
     if (errors.length === 0) {
       return { variableValues };
+<<<<<<< Updated upstream
     } else {
       console.error('getVariableValues failed due to type mismatch or other errors:', errors);
     }
@@ -185,10 +186,11 @@ export function getVariableValues(
     const gqlError = ensureGraphQLError(error);
     console.error('getVariableValues caught exception:', gqlError);
     errors.push(gqlError);
+=======
+    errors.push(ensureGraphQLError(error));
+>>>>>>> Stashed changes
   }
-
-  return { errors };
-}
+    errors.push(ensureGraphQLError(error));
 
 function coerceVariableValues(
   schema: GraphQLSchema,
