@@ -1,0 +1,68 @@
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index 4d1d82ca..a75f78af 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -166,6 +166,12 @@ jobs:
+       - name: Run Tests with coverage
+         run: npm run testonly:cover
+ 
++      - name: Upload coverage to Codecov
++        uses: codecov/codecov-action@v5
++        if: matrix.node_version_to_setup == 22
++        with:
++          files: ./coverage/lcov.info
++
+   codeql:
+     name: Run CodeQL security scan
+     runs-on: ubuntu-latest
+@@ -277,3 +283,26 @@ jobs:
+         # (e) enforcing JSR slow-types checks.
+         working-directory: ./denoDist
+         run: deno publish --dry-run
++
++  build-check:
++    name: Run npm run build to check artifacts
++    runs-on: ubuntu-latest
++    permissions:
++      contents: read # for actions/checkout
++    steps:
++      - name: Checkout repo
++        uses: actions/checkout@v6
++        with:
++          persist-credentials: false
++
++      - name: Setup Node.js
++        uses: actions/setup-node@v6
++        with:
++          cache: npm
++          node-version-file: '.node-version'
++
++      - name: Install Dependencies
++        run: npm ci --ignore-scripts
++
++      - name: Run build
++        run: npm run build
+diff --git a/README.md b/README.md
+index 253f5e96..6433b0d4 100644
+--- a/README.md
++++ b/README.md
+@@ -6,6 +6,7 @@ The JavaScript reference implementation for GraphQL, a query language for APIs c
+ 
+ [![npm version](https://badge.fury.io/js/graphql.svg)](https://badge.fury.io/js/graphql)
+ [![Build Status](https://github.com/graphql/graphql-js/workflows/CI/badge.svg?branch=main)](https://github.com/graphql/graphql-js/actions?query=branch%3Amain)
++[![Coverage Status](https://codecov.io/gh/graphql/graphql-js/branch/main/graph/badge.svg)](https://codecov.io/gh/graphql/graphql-js)
+ 
+ See more complete documentation at https://graphql.org/ and
+ https://graphql.org/graphql-js/.
+diff --git a/package.json b/package.json
+index 3584e230..61fccbe3 100644
+--- a/package.json
++++ b/package.json
+@@ -48,6 +48,7 @@
+     "precommit": "lint-staged",
+     "check:spelling": "cspell --cache --no-progress \"**/*\"",
+     "check:integrations": "npm run node:test -- \"resources/integration-test.ts\"",
++    "build": "npm run build:npm && npm run build:deno",
+     "build:npm": "node --experimental-strip-types resources/build-npm.ts",
+     "build:deno": "node --experimental-strip-types resources/build-deno.ts",
+     "diff:npm": "node --experimental-strip-types resources/diff-npm-package.ts",
