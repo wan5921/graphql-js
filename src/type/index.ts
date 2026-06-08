@@ -211,3 +211,12 @@ export { validateSchema, assertValidSchema } from './validate.ts';
 
 // Upholds the spec rules about naming.
 export { assertName, assertEnumValueName } from './assertName.ts';
+
+// Reusable field presets for common field patterns.
+export {
+  idField,
+  nameField,
+  timestampFields,
+  paginationFields,
+  mergeFields,
+} from './fieldPresets.ts';
